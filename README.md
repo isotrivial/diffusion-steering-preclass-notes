@@ -114,3 +114,8 @@ python src/eval.py experiment=experiment_name.yaml ckpt_path=checkpoint_path
 ```
 
 Notebooks are available to quickly train, evaluate models and create plots.
+
+### Toy-data notebooks
+
+See [`notebooks/toy_data/README.md`](notebooks/toy_data/README.md) for a compact 3-part
+toy-data sequence on flow-matching dynamics and a time-steered extension.

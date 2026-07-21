@@ -1,0 +1,25 @@
+# Toy-Data Notebook Series
+
+This folder contains lightweight toy-system notebooks for flow-matching experiments on
+2D geometry data. The series is organized as follows:
+
+- `00_tutorial_flow_matching_principles.ipynb`
+  - Theoretical foundation for flow matching and conditional flow matching objectives.
+- `01_toy_flow_matching_baseline.ipynb`
+  - Baseline OT-constant flow matching on three targets (circle, disk, Swiss roll).
+- `02_toy_flow_matching_time_steering.ipynb`
+  - Time-window steering extension to the same baseline, with a minimal steering term
+    and side-by-side trajectories.
+
+Run from a stable environment with dependencies from `requirements.txt` (`torchdyn`,
+`torch`, `matplotlib`, `numpy`), preferably with a GPU for faster training.
+
+Suggested workflow:
+
+1. Start with notebook `00...` to align notation and training objective.
+2. Reproduce baseline behavior with notebook `01...`.
+3. Test temporal steering behavior with notebook `02...` and keep notes on
+   hyperparameters and loss behavior.
+
+Use this as the foundation for a future extension to the `arXiv:2602.11395` direction
+in paper-level experiments.
