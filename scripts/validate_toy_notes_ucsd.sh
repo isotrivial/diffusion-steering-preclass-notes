@@ -60,9 +60,10 @@ if any(record.get("status") != "passed" for record in records):
 
 print("validated notebooks:")
 minimum_images = {
-    "01_train_unconditional_flow_matching.ipynb": 6,
+    "00_diffusion_and_flow_matching_foundations.ipynb": 4,
+    "01_train_unconditional_flow_matching.ipynb": 7,
     "03_gaussian_denoisers_and_noise_alignment.ipynb": 3,
-    "05_activation_steering_and_method_comparison.ipynb": 6,
+    "05_activation_steering_and_method_comparison.ipynb": 8,
 }
 required_text = {
     "01_train_unconditional_flow_matching.ipynb": "eight-mode map release verdict: PASS",

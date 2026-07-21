@@ -29,6 +29,7 @@ from toy_notes import (  # noqa: E402
     model_state_digest,
     sample_labeled_mixture,
     sample_eight_gaussians,
+    sliced_wasserstein,
     window_gate,
 )
 
@@ -69,6 +70,14 @@ def test_deterministic_integrator_repeats_exactly():
     first = integrate_ode(base_velocity(model), x0, steps=10, method="heun")
     second = integrate_ode(base_velocity(model), x0, steps=10, method="heun")
     assert torch.equal(first, second)
+
+
+def test_sliced_wasserstein_detects_a_shift():
+    torch.manual_seed(15)
+    samples = torch.randn(256, 2)
+    assert sliced_wasserstein(samples, samples.clone()) == 0.0
+    shifted = samples + torch.tensor([1.0, 0.0])
+    assert sliced_wasserstein(samples, shifted) > 0.5
 
 
 def test_velocity_to_denoiser_identity_for_exact_pair():
