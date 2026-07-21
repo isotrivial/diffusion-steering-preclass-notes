@@ -10,9 +10,14 @@ This folder contains lightweight toy-system notebooks for flow-matching experime
 - `02_toy_flow_matching_time_steering.ipynb`
   - Time-window steering extension to the same baseline, with a minimal steering term
     and side-by-side trajectories.
+- `03_toy_activation_steering_arxiv_ablations.ipynb`
+  - Activation-steering A/B studies inspired by arXiv:2602.11395.
+  - Ablations over strength, time-window bounds, and schedule profile.
+  - Includes path-length, endpoint-distance, and runtime metrics.
 
 Run from a stable environment with dependencies from `requirements.txt` (`torchdyn`,
 `torch`, `matplotlib`, `numpy`), preferably with a GPU for faster training.
+For the new arXiv-steering notebook, these dependencies are enough for CPU defaults.
 
 Suggested workflow:
 
@@ -20,6 +25,8 @@ Suggested workflow:
 2. Reproduce baseline behavior with notebook `01...`.
 3. Test temporal steering behavior with notebook `02...` and keep notes on
    hyperparameters and loss behavior.
+4. Expand to activation ablations in notebook `03...` and compare steer schedules
+   before scaling to higher-dimensional latent experiments.
 
 Use this as the foundation for a future extension to the `arXiv:2602.11395` direction
 in paper-level experiments.
