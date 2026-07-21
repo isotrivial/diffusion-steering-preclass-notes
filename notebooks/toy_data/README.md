@@ -1,105 +1,79 @@
-# Toy-Data Course Module: Flow Matching and Steering
+# Toy Course: Flow Matching and Post-Hoc Steering
 
-This folder contains a four-notebook teaching sequence on flow matching,
-continuous-time generation, and inference-time steering. Two-dimensional
-targets make the learned vector field and individual trajectories directly
-visible.
+This folder contains a six-notebook course sequence for undergraduates. It
+starts with visual intuition, trains one unconditional 2D flow model, and then
+compares three post-hoc steering families:
 
-> **Scope and terminology**
->
-> - These notebooks use a small 2D velocity MLP. They do not implement the
->   EPiC point-cloud architecture used elsewhere in this repository.
-> - Notebook `03` is a paper-inspired **state-space steering surrogate**. It
->   studies timing, strength, evaluation, and control-versus-fidelity trade-offs.
->   It does not reproduce the internal activation intervention or high-noise
->   noise-alignment stage of arXiv:2602.11395.
-> - In arXiv:2602.11395, **RFM** means *Recursive Feature Machine*. It should
->   not be confused with Flow Matching or Rectified Flow.
+- class Gaussian/PCA denoiser guidance;
+- inference-time class-energy gradients;
+- learned hidden-feature directions.
 
-See [`COURSE_GUIDE.md`](COURSE_GUIDE.md) for prerequisites, readings, lab
-questions, deliverables, grading criteria, and the advanced extension.
+The series intentionally contains **no attraction-to-a-point controller**. A
+class is represented by examples and distributions, not by a chosen target
+coordinate.
 
-## Learning outcomes
+## Notebook order
 
-After completing the sequence, students should be able to:
+| # | Notebook | Main question |
+|---|---|---|
+| 00 | `00_diffusion_and_flow_matching_foundations.ipynb` | How do noising paths, velocities, denoisers, and samplers differ? |
+| 01 | `01_train_unconditional_flow_matching.ipynb` | Can an unconditional MLP learn the noise-to-data flow? |
+| 02 | `02_denoisers_and_deterministic_samplers.ipynb` | How does velocity define a denoised estimate, and how do Euler, Heun, and RK4 compare? |
+| 03 | `03_gaussian_denoisers_and_noise_alignment.ipynb` | Why can class/full Gaussian denoisers provide coarse high-noise control? |
+| 04 | `04_training_free_gradient_guidance.ipynb` | What does post-hoc gradient guidance gain and cost? |
+| 05 | `05_activation_steering_and_capstone.ipynb` | When is class information readable in hidden features, and can a fixed direction steer generation? |
 
-1. Explain the conditional flow-matching training target and its ODE sampler.
-2. Train and diagnose a toy flow-matching model on several support geometries.
-3. Implement a time-gated perturbation to a learned vector field.
-4. Design a paired ablation using fixed initial samples and valid distributional
-   metrics.
-5. Distinguish toy state-space steering from block-level activation steering in
-   diffusion models.
+The older source notebooks (`flow_matching_*.ipynb`) are retained as research
+provenance. They are not part of the maintained course sequence.
 
-## Four-notebook path
+## What students learn
 
-1. `00_tutorial_flow_matching_principles.ipynb`
-   - Introduces probability paths, conditional flow matching, and ODE sampling.
-   - Checkpoint: derive the OT-constant path and target velocity.
+After the series, students should be able to:
 
-2. `01_toy_flow_matching_baseline.ipynb`
-   - Trains baseline models on a 12-point circle, a uniform disk, and a Swiss
-     roll.
-   - Checkpoint: determine whether the endpoint cloud matches the target support,
-     rather than relying only on training loss.
-
-3. `02_toy_flow_matching_time_steering.ipynb`
-   - Adds a hand-designed, time-windowed control field.
-   - Checkpoint: separate intervention success from preservation of the learned
-     target distribution.
-
-4. `03_toy_activation_steering_arxiv_ablations.ipynb`
-   - Runs paired, paper-inspired ablations over intervention time, strength, and
-     schedule.
-   - Reports control, target-fidelity, diversity, trajectory, and runtime
-     measurements.
-   - Connects the toy experiment to the components that would be required for
-     genuine activation steering.
+1. construct an I-CFM training minibatch and state its target velocity;
+2. convert a velocity prediction into a clean-data estimate for a linear path;
+3. test deterministic solver error with paired initial noise;
+4. distinguish paired-noise evaluation from the NA-RFM noise-alignment method;
+5. compare forward-only, gradient-based, and activation-space steering;
+6. report control, fidelity, diversity, and runtime without collapsing them into
+   one unsupported claim;
+7. state precisely which parts are toy analogues and which parts would require
+   a real diffusion architecture.
 
 ## Environment
 
-Install the repository dependencies:
+From the repository root:
 
 ```bash
-pip install -r requirements.txt
+python -m venv --system-site-packages .venv-toy-course
+source .venv-toy-course/bin/activate
+pip install -r notebooks/toy_data/requirements-course.txt
+python scripts/run_toy_course_notebooks.py
 ```
 
-Verify the notebook dependencies before class:
+The runner executes notebooks in order and writes executed copies plus a JSON
+report under `notebooks/toy_data/executed/`. Notebook `01` creates
+`notebooks/toy_data/artifacts/toy_flow_model.pt`; later notebooks load it. If a
+later notebook is run first, it trains the same checkpoint automatically.
+
+The default training budget is 2,500 steps. Override it only for a code-path
+check:
 
 ```bash
-python -c "import torch, torchdyn, matplotlib, numpy; print(torch.__version__)"
+TOY_COURSE_TRAIN_STEPS=400 python scripts/run_toy_course_notebooks.py
 ```
 
-Full baseline training benefits from a GPU. Reduced-step settings are useful for
-checking code paths, but conclusions should be based on a baseline that visibly
-covers the target support.
+Do not use reduced training to draw experimental conclusions.
 
-## Recommended workflow
+## Course documents
 
-1. Read and run notebook `00`; write down definitions of `x_t`, `u_t`, and
-   `v_theta`.
-2. In notebook `01`, record one successful baseline figure and its training
-   configuration.
-3. Before notebook `02`, predict how early and late steering will affect the
-   trajectory.
-4. In notebook `03`, use identical initial noise for every configuration and
-   compare intervention control against target-distribution fidelity.
-5. Report negative or unstable results rather than selecting only favorable
-   trajectories.
+- `COURSE_GUIDE.md`: prerequisites, schedule, assessments, and grading.
+- `BACKGROUND.md`: compact derivations and terminology.
+- `toy_course.py`: shared implementation used by all six notebooks.
+- `scripts/build_toy_course_notebooks.py`: readable notebook cell source.
 
-## Completion evidence
+## Primary reference
 
-A complete submission contains:
-
-* a reproducibility record with seed, device, training steps, sample count, and
-  ODE resolution;
-* a paired ablation table including the baseline;
-* one figure supporting a qualitative claim;
-* one evidence-based conclusion and one limitation;
-* a short explanation of what the toy notebook omits from NA-RFM.
-
-## Primary steering reference
-
-Qingsong Wang, Mikhail Belkin, and Yusu Wang,  
-*General and Efficient Steering of Diffusion Models*,
-arXiv:2602.11395.
+Qingsong Wang, Mikhail Belkin, and Yusu Wang,
+[*General and Efficient Steering of Diffusion Models*](https://arxiv.org/abs/2602.11395),
+arXiv:2602.11395, 2026.
