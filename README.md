@@ -119,3 +119,5 @@ Notebooks are available to quickly train, evaluate models and create plots.
 
 See [`notebooks/toy_data/README.md`](notebooks/toy_data/README.md) for a compact 4-part
 toy-data sequence on flow-matching dynamics and a time/activation-steered extension.
+For a course-ready reading order, pedagogy notes, and background checklist,
+start with [`notebooks/toy_data/COURSE_GUIDE.md`](notebooks/toy_data/COURSE_GUIDE.md).

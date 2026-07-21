@@ -1,5 +1,15 @@
 # Toy-Data Notebook Series
 
+## Course notes and materials
+
+These notebooks are organized as a compact, instructor-friendly course path on
+flow-matching and trajectory steering.
+
+The companion guide is in [`COURSE_GUIDE.md`](COURSE_GUIDE.md), with learning
+outcomes, prerequisites, references, and suggested exercises.
+
+## Sequence overview
+
 This folder contains lightweight toy-system notebooks for flow-matching experiments on
 2D geometry data. The series is organized as follows:
 
