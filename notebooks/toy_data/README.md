@@ -17,7 +17,7 @@ coordinate.
 | # | Notebook | Main question |
 |---|---|---|
 | 00 | `00_diffusion_and_flow_matching_foundations.ipynb` | How do noising paths, velocities, denoisers, and samplers differ? |
-| 01 | `01_train_unconditional_flow_matching.ipynb` | Can an unconditional MLP learn the noise-to-data flow? |
+| 01 | `01_train_unconditional_flow_matching.ipynb` | Can an unconditional MLP learn three- and eight-mode noise-to-data flows? |
 | 02 | `02_denoisers_and_deterministic_samplers.ipynb` | How does velocity define a denoised estimate, and how do Euler, Heun, and RK4 compare? |
 | 03 | `03_gaussian_denoisers_and_noise_alignment.ipynb` | Why can class/full Gaussian denoisers provide coarse high-noise control? |
 | 04 | `04_training_free_gradient_guidance.ipynb` | What does post-hoc gradient guidance gain and cost? |
@@ -26,18 +26,25 @@ coordinate.
 The older source notebooks (`flow_matching_*.ipynb`) are retained as research
 provenance. They are not part of the pre-class reading sequence.
 
+The CIFAR-10 extension remains outside this sequence. The optional notebook
+`optional/cifar10_steering_with_unconditional_edm.ipynb` uses NVIDIA's
+unconditional CIFAR-10 EDM checkpoint and a class-minus-full PCA denoiser
+correction. See `optional/CIFAR10_BRIDGE.md` for its locked assets, paired
+controls, passing A6000 release checks, and measured limits.
+
 ## What the notes cover
 
 After reading and running the notebooks, readers should be able to:
 
 1. construct an I-CFM training minibatch and state its target velocity;
-2. convert a velocity prediction into a clean-data estimate for a linear path;
-3. test deterministic solver error with paired initial noise;
-4. distinguish paired-noise evaluation from the NA-RFM noise-alignment method;
-5. compare forward-only, gradient-based, and activation-space steering;
-6. report control, fidelity, diversity, and runtime without collapsing them into
+2. inspect a learned eight-mode deterministic flow map and test its mode coverage;
+3. convert a velocity prediction into a clean-data estimate for a linear path;
+4. test deterministic solver error with paired initial noise;
+5. distinguish paired-noise evaluation from the NA-RFM noise-alignment method;
+6. compare forward-only, gradient-based, and activation-space steering;
+7. report control, fidelity, diversity, and runtime without collapsing them into
    one unsupported claim;
-7. state precisely which parts are toy analogues and which parts would require
+8. state precisely which parts are toy analogues and which parts would require
    a real diffusion architecture.
 
 ## Environment
@@ -56,11 +63,13 @@ report under `notebooks/toy_data/executed/`. Notebook `01` creates
 `notebooks/toy_data/artifacts/toy_flow_model.pt`; later notebooks load it. If a
 later notebook is run first, it trains the same checkpoint automatically.
 
-The default training budget is 2,500 steps. Override it only for a code-path
-check:
+The three-mode and eight-mode default training budgets are 2,500 and 3,000
+steps. Override them only for a code-path check:
 
 ```bash
-TOY_NOTES_TRAIN_STEPS=400 python scripts/run_toy_notes.py
+TOY_NOTES_TRAIN_STEPS=400 \
+TOY_NOTES_EIGHT_STEPS=400 \
+python scripts/run_toy_notes.py
 ```
 
 Do not use reduced training to draw experimental conclusions.

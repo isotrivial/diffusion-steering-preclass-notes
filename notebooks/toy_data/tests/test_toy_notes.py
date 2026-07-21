@@ -11,19 +11,24 @@ sys.path.insert(0, str(NOTES_DIR))
 
 from toy_notes import (  # noqa: E402
     BASE_STD,
+    EIGHT_GAUSSIAN_CENTERS,
+    EIGHT_GAUSSIAN_STD,
     VelocityMLP,
     additive_noise_coordinates,
     base_velocity,
     denoised_from_velocity,
     discriminant_direction,
     estimate_gaussian_stats,
+    fit_pca_projection,
     fit_linear_probe,
     forward_noising,
     gaussian_denoise,
     integrate_ode,
     make_activation_steered_velocity,
     make_noise_aligned_velocity,
+    model_state_digest,
     sample_labeled_mixture,
+    sample_eight_gaussians,
     window_gate,
 )
 
@@ -33,6 +38,16 @@ def test_forward_noising_has_correct_endpoints():
     noise = torch.randn(16, 2)
     assert torch.allclose(forward_noising(clean, torch.zeros(16), noise), noise)
     assert torch.allclose(forward_noising(clean, torch.ones(16), noise), clean)
+
+
+def test_eight_gaussian_sampler_uses_all_requested_components():
+    labels = torch.arange(8).repeat_interleave(32)
+    points, returned_labels = sample_eight_gaussians(labels.numel(), labels=labels)
+    centers = EIGHT_GAUSSIAN_CENTERS.to(points.device)
+    residuals = points - centers[returned_labels]
+    assert torch.equal(returned_labels.cpu(), labels)
+    assert points.shape == (labels.numel(), 2)
+    assert residuals.square().mean().sqrt() < 2.5 * EIGHT_GAUSSIAN_STD
 
 
 def test_all_integrators_solve_constant_field():
@@ -106,7 +121,7 @@ def test_zero_strength_guidance_matches_baseline():
     guided = make_noise_aligned_velocity(
         model, stats, target_class=1, strength=0.0
     )(t, x)
-    assert torch.allclose(guided, baseline, atol=1e-6)
+    assert torch.equal(guided, baseline)
 
 
 def test_linear_probe_and_direction_use_labels():
@@ -124,6 +139,18 @@ def test_linear_probe_and_direction_use_labels():
     assert (features[labels == 1] @ direction).mean() > (features[labels == 0] @ direction).mean()
 
 
+def test_pca_projection_fits_on_train_and_transforms_held_out():
+    torch.manual_seed(13)
+    train = torch.randn(80, 7) @ torch.diag(torch.tensor([4.0, 2.0, 1.0, 0.8, 0.6, 0.4, 0.2]))
+    held_out = torch.randn(25, 7) + 3.0
+    projection = fit_pca_projection(train)
+    train_projected = projection.transform(train)
+    held_out_projected = projection.transform(held_out)
+    assert train_projected.shape == (80, 2)
+    assert held_out_projected.shape == (25, 2)
+    assert torch.allclose(train_projected.mean(dim=0), torch.zeros(2), atol=1e-5)
+
+
 def test_zero_activation_strength_matches_baseline():
     torch.manual_seed(11)
     model = VelocityMLP(hidden_dim=20)
@@ -135,3 +162,18 @@ def test_zero_activation_strength_matches_baseline():
         model, direction, strength=0.0
     )(t, x)
     assert torch.allclose(guided, baseline, atol=1e-6)
+
+
+def test_post_hoc_velocity_does_not_change_model_state():
+    torch.manual_seed(14)
+    model = VelocityMLP(hidden_dim=20)
+    before = model_state_digest(model)
+    direction = torch.randn(20)
+    x0 = torch.randn(30, 2)
+    integrate_ode(
+        make_activation_steered_velocity(model, direction, strength=2.0),
+        x0,
+        steps=8,
+        method="heun",
+    )
+    assert model_state_digest(model) == before

@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/edm-cifar10-bridge-manifest.schema.json",
+  "title": "Unconditional EDM CIFAR-10 steering bridge manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generator",
+    "checkpoint",
+    "data",
+    "pca_statistics",
+    "evaluator",
+    "sampler",
+    "steering",
+    "calibration",
+    "evaluation"
+  ],
+  "properties": {
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_url", "source_path", "source_commit", "architecture", "objective", "unconditional", "prediction_type"],
+      "properties": {
+        "source_url": {"const": "https://github.com/NVlabs/edm"},
+        "source_path": {"type": "string", "minLength": 1},
+        "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "architecture": {"type": "string", "minLength": 1},
+        "objective": {"const": "EDM"},
+        "unconditional": {"const": true},
+        "prediction_type": {"const": "denoised_x0"}
+      }
+    },
+    "checkpoint": {"$ref": "#/$defs/hashed_file"},
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "archive", "image_shape", "normalization", "class_order", "reference_split"],
+      "properties": {
+        "name": {"const": "CIFAR-10"},
+        "archive": {"$ref": "#/$defs/hashed_file"},
+        "image_shape": {"const": [3, 32, 32]},
+        "normalization": {"const": "uint8 to [-1, 1] by x / 127.5 - 1"},
+        "class_order": {
+          "const": ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
+        },
+        "reference_split": {"const": "test"}
+      }
+    },
+    "pca_statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "source_split", "preprocessing", "full", "target", "wrong"],
+      "properties": {
+        "method": {"const": "full-image PCA covariance with Wiener denoising"},
+        "source_split": {"const": "train"},
+        "preprocessing": {"const": "uint8 to [-1, 1] by x / 127.5 - 1"},
+        "full": {"$ref": "#/$defs/pca_file"},
+        "target": {"$ref": "#/$defs/pca_file"},
+        "wrong": {"$ref": "#/$defs/pca_file"}
+      }
+    },
+    "evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_url", "source_path", "source_commit", "architecture", "checkpoint", "normalization", "reported_test_accuracy", "minimum_test_accuracy"],
+      "properties": {
+        "source_url": {"const": "https://github.com/chenyaofo/pytorch-cifar-models"},
+        "source_path": {"type": "string", "minLength": 1},
+        "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "architecture": {"const": "cifar10_resnet56"},
+        "checkpoint": {"$ref": "#/$defs/hashed_file"},
+        "normalization": {"const": "[0,1] then CIFAR mean/std"},
+        "reported_test_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
+        "minimum_test_accuracy": {"type": "number", "minimum": 0.9, "maximum": 1}
+      }
+    },
+    "sampler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "steps", "network_evaluations", "sigma_min", "sigma_max", "rho", "S_churn", "dtype"],
+      "properties": {
+        "method": {"const": "deterministic EDM Heun"},
+        "steps": {"const": 18},
+        "network_evaluations": {"const": 35},
+        "sigma_min": {"const": 0.002},
+        "sigma_max": {"const": 80.0},
+        "rho": {"const": 7.0},
+        "S_churn": {"const": 0.0},
+        "dtype": {"const": "float64 solver state, float32 network"}
+      }
+    },
+    "steering": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "target_class", "wrong_class", "strength", "start_step", "end_step", "capture_steps"],
+      "properties": {
+        "method": {"const": "class-minus-full PCA Wiener denoiser correction"},
+        "target_class": {"type": "integer", "minimum": 0, "maximum": 9},
+        "wrong_class": {"type": "integer", "minimum": 0, "maximum": 9},
+        "strength": {"type": "number", "minimum": 0},
+        "start_step": {"type": "integer", "minimum": 0, "maximum": 17},
+        "end_step": {"type": "integer", "minimum": 0, "maximum": 17},
+        "capture_steps": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0, "maximum": 17}}
+      }
+    },
+    "calibration": {"$ref": "#/$defs/run_split"},
+    "evaluation": {
+      "allOf": [
+        {"$ref": "#/$defs/run_split"},
+        {
+          "type": "object",
+          "required": ["bootstrap_seed", "bootstrap_draws", "minimum_target_rate_gain", "minimum_feature_trace_ratio", "maximum_runtime_seconds", "maximum_peak_memory_gb", "paired_noise"],
+          "properties": {
+            "bootstrap_seed": {"type": "integer", "minimum": 0},
+            "bootstrap_draws": {"type": "integer", "minimum": 1000},
+            "minimum_target_rate_gain": {"type": "number", "minimum": 0},
+            "minimum_feature_trace_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "maximum_runtime_seconds": {"type": "number", "exclusiveMinimum": 0},
+            "maximum_peak_memory_gb": {"type": "number", "exclusiveMinimum": 0},
+            "paired_noise": {"const": true}
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "hashed_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "pca_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "class_index", "class_name", "num_images", "rank"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "class_index": {"type": ["integer", "null"], "minimum": 0, "maximum": 9},
+        "class_name": {"type": "string", "minLength": 1},
+        "num_images": {"type": "integer", "minimum": 1},
+        "rank": {"type": "integer", "minimum": 1, "maximum": 3072}
+      }
+    },
+    "run_split": {
+      "type": "object",
+      "required": ["sample_count", "sampling_seed", "batch_size"],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 8},
+        "sampling_seed": {"type": "integer", "minimum": 0},
+        "batch_size": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

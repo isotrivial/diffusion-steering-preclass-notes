@@ -81,6 +81,9 @@ target/
 .ipynb_checkpoints
 notebooks/toy_data/artifacts/
 notebooks/toy_data/executed/
+notebooks/toy_data/optional/executed/
+.external/
+.validation/
 
 # IPython
 profile_default/
@@ -108,6 +111,8 @@ celerybeat.pid
 
 # Environments
 .venv
+.venv-toy-notes/
+.venv-edm-bridge/
 env/
 venv/
 ENV/

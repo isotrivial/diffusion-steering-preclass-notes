@@ -137,7 +137,21 @@ The notebooks check three empirical requirements instead of assuming them:
 2. learned directions remain aligned across nearby times;
 3. injection improves control without unacceptable fidelity or diversity loss.
 
-## 8. Scope boundary
+## 8. Reading the eight-Gaussian flow map
+
+The eight-Gaussian example stores a deterministic trajectory for every sampled
+base point. Only after sampling, each endpoint is assigned to its nearest data
+component for coloring and occupancy diagnostics. That assignment is an
+evaluation label. It is not provided to the model and does not exert a force
+toward a component center.
+
+Mode coverage asks whether every data component receives nontrivial generated
+mass. Occupancy error compares generated and target component frequencies. The
+mean nearest-component distance checks within-component spread, while sliced
+Wasserstein distance compares the full generated and target point sets. No one
+metric establishes distributional equality.
+
+## 9. Scope boundary
 
 The toy model is not a U-Net, image diffusion model, or implementation of the
 full NA-RFM pipeline. It does implement the following mechanisms in a setting

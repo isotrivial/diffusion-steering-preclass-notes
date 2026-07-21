@@ -11,6 +11,10 @@ The notebooks use one unconditional flow-matching MLP. Class labels never enter
 its training input. Labels appear later only for evaluation and for constructing
 post-hoc steering signals.
 
+Notebook `01` also trains a separate unlabeled eight-Gaussian model solely to
+make the learned flow map easy to see. That illustration model is not used by
+the steering notebooks.
+
 ## Useful Background
 
 Readers should be comfortable with:
@@ -34,7 +38,9 @@ denoiser, and sampler.
 ### 01: Unconditional flow-matching training
 
 Train I-CFM on an unlabeled three-component mixture, integrate the learned ODE,
-and inspect generated samples and the time-dependent vector field.
+and inspect generated samples and the time-dependent vector field. A second
+unconditional model on eight Gaussian modes shows the learned deterministic
+flow map at several times and checks mode coverage and occupancy.
 
 ### 02: Denoisers and deterministic samplers
 
@@ -45,7 +51,8 @@ and RK4 from exactly the same initial noise tensor.
 
 Fit target-class and full-data Gaussian statistics, visualize the difference
 between their denoisers, and apply that correction only during a high-noise
-window.
+window. A zero-strength control and explicit verdict separate partial coarse
+steering from full class-conditional generation.
 
 ### 04: Post-hoc gradient guidance
 
@@ -57,7 +64,9 @@ forward-only Gaussian/PCA correction.
 
 Measure class readability across time, visualize hidden features, learn a
 covariance-aware target-vs-rest direction, and compare activation steering with
-noise alignment and gradient guidance.
+noise alignment and gradient guidance. Probes use held-out examples, a
+shuffled-label control, a fresh-batch confusion matrix, and an independent null
+direction.
 
 ## Terminology
 
@@ -90,6 +99,10 @@ not establish that a steering method preserves fidelity or diversity:
 - diversity ratio;
 - wall-clock time.
 
+The eight-Gaussian flow map additionally reports mode coverage, component
+occupancy error, within-component spread, and SWD. These are broad sanity checks,
+not a claim that the learned and target densities are exactly equal.
+
 ## Questions for Class
 
 1. Why is a denoised estimate useful when the trained network predicts velocity?
@@ -99,6 +112,14 @@ not establish that a steering method preserves fidelity or diversity:
 5. At what times do hidden features become class-informative?
 6. Which conclusions from the 2D examples require new evidence before applying
    them to image diffusion models?
+
+## Optional image bridge
+
+CIFAR-10 is not a seventh core note. The optional executable bridge uses the
+official unconditional NVIDIA EDM checkpoint with deterministic sampling and a
+class-minus-full PCA denoiser correction. Its manifest locks checkpoint hashes,
+PCA provenance, evaluator, calibration/evaluation seed splits, and paired zero
+and wrong-class controls. See `optional/CIFAR10_BRIDGE.md`.
 
 ## References
 

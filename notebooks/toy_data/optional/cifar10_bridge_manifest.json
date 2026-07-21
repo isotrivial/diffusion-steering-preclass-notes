@@ -1,0 +1,108 @@
+{
+  "generator": {
+    "source_url": "https://github.com/NVlabs/edm",
+    "source_path": "/data/qingsong/diffusion-steering-preclass-notes/.external/edm",
+    "source_commit": "008a4e5316c8e3bfe61a62f874bddba254295afb",
+    "architecture": "EDMPrecond with unconditional CIFAR-10 DDPM++ backbone",
+    "objective": "EDM",
+    "unconditional": true,
+    "prediction_type": "denoised_x0"
+  },
+  "checkpoint": {
+    "path": "/data/qingsong/clean_edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl",
+    "sha256": "4d5dcc1f1d0d41c8934ad21626eeddbdc0460182becf9fc059a0631b1eedb4da"
+  },
+  "data": {
+    "name": "CIFAR-10",
+    "archive": {
+      "path": "/data/qingsong/clean_edm/datasets/cifar-10-python.tar.gz",
+      "sha256": "6d958be074577803d12ecdefd02955f39262c83c16fe9348329d7fe0b5c001ce"
+    },
+    "image_shape": [3, 32, 32],
+    "normalization": "uint8 to [-1, 1] by x / 127.5 - 1",
+    "class_order": ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"],
+    "reference_split": "test"
+  },
+  "pca_statistics": {
+    "method": "full-image PCA covariance with Wiener denoising",
+    "source_split": "train",
+    "preprocessing": "uint8 to [-1, 1] by x / 127.5 - 1",
+    "full": {
+      "path": "/data/qingsong/jetstream2_backup/My-workspace/diff_guidance/efficient_diffusion_steering/cifar10_label_guidance/filters/full_dataset.pt",
+      "sha256": "c6aa3db75213179de7af99ae0d4fe398292cb464eb1ab4b121f6befadb742bee",
+      "class_index": null,
+      "class_name": "all CIFAR-10 classes",
+      "num_images": 50000,
+      "rank": 3072
+    },
+    "target": {
+      "path": "/data/qingsong/jetstream2_backup/My-workspace/diff_guidance/efficient_diffusion_steering/cifar10_label_guidance/filters/class_3.pt",
+      "sha256": "0e63b81533ef0f59dbc85c30e4d8cffaeaa89598881926da5499f816ad0d6181",
+      "class_index": 3,
+      "class_name": "cat",
+      "num_images": 5000,
+      "rank": 3070
+    },
+    "wrong": {
+      "path": "/data/qingsong/jetstream2_backup/My-workspace/diff_guidance/efficient_diffusion_steering/cifar10_label_guidance/filters/class_8.pt",
+      "sha256": "ae6b08e416674e7cccf4c35b09e948bd34ab014e6b67c782c5872d7bc33ad848",
+      "class_index": 8,
+      "class_name": "ship",
+      "num_images": 5000,
+      "rank": 3070
+    }
+  },
+  "evaluator": {
+    "source_url": "https://github.com/chenyaofo/pytorch-cifar-models",
+    "source_path": "/data/qingsong/diffusion-steering-preclass-notes/.external/pytorch-cifar-models",
+    "source_commit": "786c16252c0fc58ee9adac063f8337cc4a7a497a",
+    "architecture": "cifar10_resnet56",
+    "checkpoint": {
+      "path": "/home/qingsong/.cache/torch/hub/checkpoints/cifar10_resnet56-187c023a.pt",
+      "sha256": "187c023aee0c9cf3093a682d9447a538cbaf5489f7ae78a7df4edf2246ce380b"
+    },
+    "normalization": "[0,1] then CIFAR mean/std",
+    "reported_test_accuracy": 0.9437,
+    "minimum_test_accuracy": 0.9
+  },
+  "sampler": {
+    "method": "deterministic EDM Heun",
+    "steps": 18,
+    "network_evaluations": 35,
+    "sigma_min": 0.002,
+    "sigma_max": 80.0,
+    "rho": 7.0,
+    "S_churn": 0.0,
+    "dtype": "float64 solver state, float32 network"
+  },
+  "steering": {
+    "method": "class-minus-full PCA Wiener denoiser correction",
+    "target_class": 3,
+    "wrong_class": 8,
+    "strength": 4.0,
+    "start_step": 0,
+    "end_step": 5,
+    "capture_steps": [0, 3, 6, 10, 17]
+  },
+  "calibration": {
+    "sample_count": 64,
+    "sampling_seed": 10000,
+    "batch_size": 64,
+    "candidate_strengths": [0.5, 1.0, 2.0, 3.0, 4.0],
+    "minimum_feature_trace_ratio": 0.6,
+    "maximum_near_duplicate_rate": 0.05,
+    "selection_rule": "Among finite candidates preserving at least 60% feature trace with at most 5% near duplicates, choose the largest mean target probability."
+  },
+  "evaluation": {
+    "sample_count": 256,
+    "sampling_seed": 0,
+    "batch_size": 64,
+    "bootstrap_seed": 2113,
+    "bootstrap_draws": 4000,
+    "minimum_target_rate_gain": 0.08,
+    "minimum_feature_trace_ratio": 0.6,
+    "maximum_runtime_seconds": 600,
+    "maximum_peak_memory_gb": 40,
+    "paired_noise": true
+  }
+}

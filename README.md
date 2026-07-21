@@ -1,125 +1,76 @@
-<div align="center">
+# Diffusion Steering: Pre-Class Notes
 
-# EPiC Flow Matching
+Preparatory notebooks for undergraduates studying diffusion models, flow
+matching, deterministic sampling, and post-hoc steering. The notes build the
+ideas first in a fully visible 2D setting and keep claims tied to paired
+experiments and explicit controls.
 
-[![python](https://img.shields.io/badge/-Python_3.10-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![pytorch](https://img.shields.io/badge/PyTorch_1.10+-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/get-started/locally/)
-[![lightning](https://img.shields.io/badge/-Lightning_1.9+-792ee5?logo=pytorchlightning&logoColor=white)](https://pytorchlightning.ai/)
-[![hydra](https://img.shields.io/badge/Config-Hydra_1.3-89b8cd)](https://hydra.cc/)
-[![black](https://img.shields.io/badge/Code%20Style-Black-black.svg?labelColor=gray)](https://black.readthedocs.io/en/stable/)
-[![isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/) <br>
-<a href="https://github.com/ashleve/lightning-hydra-template"><img alt="Template" src="https://img.shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=gray"></a>
-[![Paper](http://img.shields.io/badge/paper-arxiv.2310.00049-B31B1B.svg)](https://arxiv.org/abs/2310.00049)
-[![Conference](http://img.shields.io/badge/AnyConference-year-4b44ce.svg)](https://papers.nips.cc/paper/2020)
+The maintained notes do not use EPiC layers. This repository began from an
+EPiC-FM research-code tree because the original toy notebooks lived there; the
+teaching sequence itself uses small ordinary MLPs.
 
-</div>
+## Reading sequence
 
-## Description
+| # | Notebook | Main idea |
+|---|---|---|
+| 00 | `00_diffusion_and_flow_matching_foundations.ipynb` | Noising paths, vector fields, and flow-matching targets |
+| 01 | `01_train_unconditional_flow_matching.ipynb` | Train an unlabeled model and inspect a learned eight-mode flow map |
+| 02 | `02_denoisers_and_deterministic_samplers.ipynb` | Convert velocity to a denoised estimate; compare Euler, Heun, and RK4 |
+| 03 | `03_gaussian_denoisers_and_noise_alignment.ipynb` | Use class-minus-full Gaussian/PCA denoisers for coarse steering |
+| 04 | `04_training_free_gradient_guidance.ipynb` | Differentiate a class objective during sampling |
+| 05 | `05_activation_steering_and_method_comparison.ipynb` | Probe hidden features and test matched activation interventions |
 
-> [!NOTE]
-> A library that includes these models as well as additional loss functions, architectures and (particle physics) datasets can be found [here](https://github.com/ewencedr/particle_fm).
+Start with [the reading guide](notebooks/toy_data/PRECLASS_NOTES.md). Compact
+derivations and terminology are in
+[the background notes](notebooks/toy_data/BACKGROUND.md).
 
-This is the official repository implementing the EPiC Flow Matching point cloud generative machine learning models from the paper '[EPiC-ly Fast Particle Cloud Generation with Flow-Matching and Diffusion](https://arxiv.org/abs/2310.00049)'.
+There is no attraction-to-a-point controller in the maintained sequence. A
+class is represented by examples, fitted distributions, class objectives, or
+held-out activation directions, never by a chosen target point.
 
-EPiC Flow Matching is a [Continuous Normalising Flow](https://arxiv.org/abs/1806.07366) that is trained with a simulation free approach called [Flow Matching](https://arxiv.org/abs/2210.02747). The model uses [DeepSet](https://arxiv.org/abs/1703.06114) based [EPiC layers](https://arxiv.org/abs/2301.08128) for the architecture, which allow for good scalability to high set sizes.
+## Optional CIFAR-10 bridge
 
-The models are tested on the [JetNet dataset](https://zenodo.org/record/6975118). The JetNet dataset is used in particle physics to test point cloud generative deep learning architectures. It consists of simulated particle jets produced by proton proton collisions in a simplified detector. The dataset is split into jets originating from tops, light quarks, gluons, W bosons and Z bosons and has a maximum number of 150 particles per jet.
+The optional image notebook uses NVIDIA's official **unconditional** CIFAR-10
+EDM checkpoint, deterministic 18-step sampling, and a class-minus-full PCA
+denoiser correction. It includes paired baseline, zero-strength, target-class,
+and wrong-class controls. Its manifest-locked A6000 run passed all predeclared
+checks. It is intentionally separate from the six core notes.
 
-This repository uses [pytorch lightning](https://www.pytorchlightning.ai/index.html), [hydra](https://hydra.cc/docs/intro/) for model configurations and supports logging with [comet](https://www.comet.com/site/) and [wandb](https://wandb.ai/site). For a deeper explanation of how to use this repository, please have a look at the [template](https://github.com/ashleve/lightning-hydra-template) directly.
+See [the CIFAR-10 bridge contract](notebooks/toy_data/optional/CIFAR10_BRIDGE.md).
 
-## How to run
-
-Install dependencies
-
-```bash
-# clone project
-git clone https://github.com/YourGithubName/your-repo-name
-cd your-repo-name
-
-# [OPTIONAL] create conda environment
-conda create -n myenv python=3.10
-conda activate myenv
-
-# install pytorch according to instructions
-# https://pytorch.org/get-started/
-
-# install requirements
-pip install -r requirements.txt
-```
-
-Create .env file to set paths and API keys
+## Run the core notes
 
 ```bash
-PROJEKT_ROOT="/folder/folder/"
-DATA_DIR="/folder/folder/"
-LOG_DIR="/folder/folder/"
-COMET_API_TOKEN="XXXXXXXXXX"
+python -m venv --system-site-packages .venv-toy-notes
+source .venv-toy-notes/bin/activate
+pip install -r notebooks/toy_data/requirements-notes.txt
+python scripts/run_toy_notes.py
 ```
 
-Train model with default configuration
+Executed copies and an execution report are written to
+`notebooks/toy_data/executed/`. Default training budgets are evidence settings;
+reduced environment-variable overrides are only smoke tests.
+
+The optional CIFAR-10 notebook needs the external assets and GPU environment
+locked by its manifest. On the UCSD host:
 
 ```bash
-# train on CPU
-python src/train.py trainer=cpu
-
-# train on GPU
-python src/train.py trainer=gpu
+bash scripts/validate_cifar10_edm_bridge_ucsd.sh
 ```
 
-Train model with chosen experiment configuration from [configs/experiment/](configs/experiment/)
+## Repository layout
 
-```bash
-python src/train.py experiment=experiment_name.yaml
-```
+- `notebooks/toy_data/`: maintained notes, reading material, tests, and shared helpers;
+- `notebooks/toy_data/optional/`: manifest-gated image bridge;
+- `scripts/build_toy_notes.py`: readable source for the six generated notebooks;
+- `scripts/run_toy_notes.py`: ordered notebook runner;
+- `scripts/validate_toy_notes_ucsd.sh`: full core validation on one GPU;
+- `src/`, `configs/`, `checkpoints/`: retained upstream EPiC-FM research code.
 
-You can override any parameter from command line like this
+## References
 
-```bash
-python src/train.py trainer.max_epochs=20 data.batch_size=64
-```
-
-The experiments include
-
-<details>
-  <summary>
-    <b>fm_tops30_cond</b>
-  </summary>
-  EPiC Flow Matching trained on top30 dataset with conditioning on jet mass and pt
-</details>
-<details>
-  <summary>
-    <b>fm_tops30</b>
-  </summary>
-  EPiC Flow Matching trained on top30 dataset with no additional conditioning. Jet size conditioning is a neccessity for the architecture
-</details>
-<details>
-  <summary>
-    <b>fm_tops150_cond</b>
-  </summary>
-  EPiC Flow Matching trained on top150 dataset with conditioning on jet mass and pt
-</details>
-<details>
-  <summary>
-    <b>fm_tops150</b>
-  </summary>
-  EPiC Flow Matching trained on top150 dataset with no additional conditioning. Jet size conditioning is a neccessity for the architecture
-</details>
-
-<br>
-
-During training and evaluation, metrics and plots can be logged via comet and wandb. After training the model will be evaluated automatically and the final results will be saved locally and logged via the selected loggers. The evaluation can also be manually started like this
-
-```bash
-python src/eval.py experiment=experiment_name.yaml ckpt_path=checkpoint_path
-```
-
-Notebooks are available to quickly train, evaluate models and create plots.
-
-### Toy-data notebooks
-
-See [`notebooks/toy_data/README.md`](notebooks/toy_data/README.md) for six
-pre-class notebooks covering flow-matching training, deterministic samplers,
-Gaussian/PCA denoisers, class-energy gradients, and hidden-feature steering.
-They use an unconditional 2D model and distribution-level class controls; they
-do not use attraction toward a chosen point. The suggested reading order is in
-[`notebooks/toy_data/PRECLASS_NOTES.md`](notebooks/toy_data/PRECLASS_NOTES.md).
+- Lipman et al., [*Flow Matching for Generative Modeling*](https://arxiv.org/abs/2210.02747).
+- Karras et al., [*Elucidating the Design Space of Diffusion-Based Generative Models*](https://arxiv.org/abs/2206.00364).
+- Song, Meng, and Ermon, [*Denoising Diffusion Implicit Models*](https://arxiv.org/abs/2010.02502).
+- Wang, Belkin, and Wang, [*General and Efficient Steering of Diffusion Models*](https://arxiv.org/abs/2602.11395).
+- Buhmann et al., [*EPiC-ly Fast Particle Cloud Generation with Flow-Matching and Diffusion*](https://arxiv.org/abs/2310.00049), retained upstream code provenance.

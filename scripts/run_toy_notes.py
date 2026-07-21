@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import traceback
 from pathlib import Path
@@ -27,6 +28,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--timeout", type=int, default=1800, help="Per-cell timeout in seconds")
+    parser.add_argument(
+        "--kernel-name", default=os.environ.get("TOY_NOTES_KERNEL_NAME", "python3")
+    )
     parser.add_argument("--keep-going", action="store_true")
     return parser.parse_args()
 
@@ -64,7 +68,7 @@ def main() -> int:
             client = NotebookClient(
                 notebook,
                 timeout=args.timeout,
-                kernel_name="python3",
+                kernel_name=args.kernel_name,
                 resources={"metadata": {"path": str(NOTES_DIR)}},
                 allow_errors=False,
             )

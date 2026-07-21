@@ -1,0 +1,149 @@
+{
+  "sampling_seed": 10000,
+  "sample_count": 64,
+  "selection_rule": "Among finite candidates preserving at least 60% feature trace with at most 5% near duplicates, choose the largest mean target probability.",
+  "baseline": {
+    "finite": true,
+    "target_rate": 0.109375,
+    "target_probability": 0.11103300005197525,
+    "target_feature_mean_distance": 5.184709548950195,
+    "feature_covariance_trace": 34.241004943847656,
+    "class_histogram": [
+      5,
+      7,
+      5,
+      7,
+      8,
+      6,
+      5,
+      2,
+      11,
+      8
+    ],
+    "class_histogram_entropy": 0.9703729152679443,
+    "near_duplicate_rate": 0.0
+  },
+  "candidates": [
+    {
+      "finite": true,
+      "target_rate": 0.109375,
+      "target_probability": 0.09958197921514511,
+      "target_feature_mean_distance": 5.083714962005615,
+      "feature_covariance_trace": 35.080020904541016,
+      "class_histogram": [
+        4,
+        7,
+        4,
+        7,
+        10,
+        9,
+        4,
+        3,
+        8,
+        8
+      ],
+      "class_histogram_entropy": 0.9698507189750671,
+      "near_duplicate_rate": 0.0,
+      "strength": 0.5,
+      "target_rate_gain": 0.0,
+      "feature_trace_ratio": 1.0245032516443158
+    },
+    {
+      "finite": true,
+      "target_rate": 0.140625,
+      "target_probability": 0.14483335614204407,
+      "target_feature_mean_distance": 4.6924920082092285,
+      "feature_covariance_trace": 34.0771484375,
+      "class_histogram": [
+        2,
+        8,
+        4,
+        9,
+        12,
+        13,
+        5,
+        2,
+        3,
+        6
+      ],
+      "class_histogram_entropy": 0.9241202473640442,
+      "near_duplicate_rate": 0.0,
+      "strength": 1.0,
+      "target_rate_gain": 0.03125,
+      "feature_trace_ratio": 0.9952146116442445
+    },
+    {
+      "finite": true,
+      "target_rate": 0.234375,
+      "target_probability": 0.23509427905082703,
+      "target_feature_mean_distance": 4.028106212615967,
+      "feature_covariance_trace": 32.44518280029297,
+      "class_histogram": [
+        2,
+        5,
+        4,
+        15,
+        9,
+        14,
+        6,
+        5,
+        1,
+        3
+      ],
+      "class_histogram_entropy": 0.8940609693527222,
+      "near_duplicate_rate": 0.0,
+      "strength": 2.0,
+      "target_rate_gain": 0.125,
+      "feature_trace_ratio": 0.9475534626831285
+    },
+    {
+      "finite": true,
+      "target_rate": 0.359375,
+      "target_probability": 0.3522831201553345,
+      "target_feature_mean_distance": 3.5422351360321045,
+      "feature_covariance_trace": 31.783607482910156,
+      "class_histogram": [
+        2,
+        5,
+        2,
+        23,
+        8,
+        12,
+        3,
+        5,
+        0,
+        4
+      ],
+      "class_histogram_entropy": 0.813554048538208,
+      "near_duplicate_rate": 0.0,
+      "strength": 3.0,
+      "target_rate_gain": 0.25,
+      "feature_trace_ratio": 0.9282323207228461
+    },
+    {
+      "finite": true,
+      "target_rate": 0.375,
+      "target_probability": 0.3692007064819336,
+      "target_feature_mean_distance": 3.261658191680908,
+      "feature_covariance_trace": 29.984569549560547,
+      "class_histogram": [
+        1,
+        3,
+        2,
+        24,
+        6,
+        15,
+        3,
+        8,
+        0,
+        2
+      ],
+      "class_histogram_entropy": 0.7635719776153564,
+      "near_duplicate_rate": 0.0,
+      "strength": 4.0,
+      "target_rate_gain": 0.265625,
+      "feature_trace_ratio": 0.8756918670679409
+    }
+  ],
+  "selected_strength": 4.0
+}

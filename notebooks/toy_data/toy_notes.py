@@ -11,6 +11,7 @@ import math
 import os
 import random
 import time
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Optional, Tuple
@@ -25,6 +26,7 @@ import torch.nn.functional as F
 NOTES_DIR = Path(__file__).resolve().parent
 ARTIFACT_DIR = NOTES_DIR / "artifacts"
 CHECKPOINT_PATH = ARTIFACT_DIR / "toy_flow_model.pt"
+EIGHT_GAUSSIAN_CHECKPOINT_PATH = ARTIFACT_DIR / "eight_gaussian_flow_model.pt"
 MODEL_FORMAT_VERSION = 2
 
 CLASS_NAMES = ("left", "right", "top")
@@ -37,6 +39,21 @@ CLASS_SCALES = torch.tensor(
     [[0.45, 0.25], [0.32, 0.48], [0.55, 0.30]], dtype=torch.float32
 )
 CLASS_ANGLES = torch.tensor([0.35, -0.45, 0.0], dtype=torch.float32)
+EIGHT_GAUSSIAN_STD = 0.20
+_EIGHT_GAUSSIAN_ANGLES = torch.arange(8, dtype=torch.float32) * (2.0 * math.pi / 8.0)
+EIGHT_GAUSSIAN_CENTERS = 3.2 * torch.stack(
+    [torch.cos(_EIGHT_GAUSSIAN_ANGLES), torch.sin(_EIGHT_GAUSSIAN_ANGLES)], dim=1
+)
+EIGHT_GAUSSIAN_COLORS = (
+    "#0072B2",
+    "#D55E00",
+    "#009E73",
+    "#CC79A7",
+    "#56B4E9",
+    "#E69F00",
+    "#332288",
+    "#777777",
+)
 
 
 def choose_device() -> torch.device:
@@ -94,6 +111,24 @@ def sample_class(
 ) -> torch.Tensor:
     labels = torch.full((n,), int(class_id), dtype=torch.long, device=device or choose_device())
     return sample_labeled_mixture(n, device=device, labels=labels)[0]
+
+
+def sample_eight_gaussians(
+    n: int,
+    *,
+    device: Optional[torch.device] = None,
+    labels: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Sample eight equally weighted isotropic Gaussians on a ring."""
+    device = device or choose_device()
+    if labels is None:
+        labels = torch.randint(8, (n,), device=device)
+    else:
+        labels = labels.to(device=device, dtype=torch.long)
+        n = labels.numel()
+    centers = EIGHT_GAUSSIAN_CENTERS.to(device)
+    points = centers[labels] + EIGHT_GAUSSIAN_STD * torch.randn(n, 2, device=device)
+    return points, labels
 
 
 def sample_base(n: int, *, device: Optional[torch.device] = None) -> torch.Tensor:
@@ -165,8 +200,9 @@ def train_flow_model(
     learning_rate: float = 2e-3,
     seed: int = 2026,
     progress_every: int = 500,
+    data_sampler: Callable[..., Tuple[torch.Tensor, torch.Tensor]] = sample_labeled_mixture,
 ) -> list[float]:
-    """Train independent conditional flow matching on the unlabeled mixture."""
+    """Train independent conditional flow matching on an unlabeled 2D dataset."""
     set_seed(seed)
     device = next(model.parameters()).device
     model.train()
@@ -174,7 +210,7 @@ def train_flow_model(
     losses: list[float] = []
 
     for step in range(1, steps + 1):
-        x_data, _ = sample_labeled_mixture(batch_size, device=device)
+        x_data, _ = data_sampler(batch_size, device=device)
         x_noise = sample_base(batch_size, device=device)
         t = torch.rand(batch_size, device=device)
         xt = forward_noising(x_data, t, x_noise)
@@ -229,6 +265,64 @@ def load_or_train_model(
     model = VelocityMLP().to(device)
     losses = train_flow_model(model, steps=steps)
     save_checkpoint(model, losses, checkpoint_path)
+    return model, losses, True
+
+
+def load_or_train_eight_gaussian_model(
+    *,
+    device: Optional[torch.device] = None,
+    steps: Optional[int] = None,
+    force_retrain: bool = False,
+    checkpoint_path: Path = EIGHT_GAUSSIAN_CHECKPOINT_PATH,
+) -> Tuple[VelocityMLP, list[float], bool]:
+    """Load or train the separate model used only for the eight-mode flow map."""
+    device = device or choose_device()
+    if steps is None:
+        steps = int(os.environ.get("TOY_NOTES_EIGHT_STEPS", "3000"))
+    if checkpoint_path.exists() and not force_retrain:
+        payload = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        if (
+            payload.get("format_version") == MODEL_FORMAT_VERSION
+            and payload.get("dataset") == "eight_gaussian_ring"
+            and payload.get("training_steps") == steps
+            and payload.get("component_std") == EIGHT_GAUSSIAN_STD
+            and payload.get("base_std") == BASE_STD
+            and torch.is_tensor(payload.get("centers"))
+            and payload["centers"].shape == EIGHT_GAUSSIAN_CENTERS.shape
+            and torch.allclose(
+                payload["centers"].cpu(),
+                EIGHT_GAUSSIAN_CENTERS,
+            )
+        ):
+            model = VelocityMLP(hidden_dim=int(payload["hidden_dim"])).to(device)
+            model.load_state_dict(payload["model_state"])
+            model.eval()
+            return model, [float(v) for v in payload.get("losses", [])], False
+
+    model = VelocityMLP().to(device)
+    training_seed = 2106
+    losses = train_flow_model(
+        model,
+        steps=steps,
+        data_sampler=sample_eight_gaussians,
+        seed=training_seed,
+    )
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "format_version": MODEL_FORMAT_VERSION,
+            "dataset": "eight_gaussian_ring",
+            "hidden_dim": model.hidden_dim,
+            "model_state": model.state_dict(),
+            "losses": losses,
+            "centers": EIGHT_GAUSSIAN_CENTERS,
+            "component_std": EIGHT_GAUSSIAN_STD,
+            "base_std": BASE_STD,
+            "training_seed": training_seed,
+            "training_steps": steps,
+        },
+        checkpoint_path,
+    )
     return model, losses, True
 
 
@@ -401,13 +495,10 @@ def make_noise_aligned_velocity(
         with torch.no_grad():
             v = model(t, x)
             gate = window_gate(t, start, end).reshape(-1, 1)
-            clean = denoised_from_velocity(x, t, v)
-            clean = clean + float(strength) * gate * noise_alignment_delta(
-                x, t, target_class, stats
-            )
             remaining = (1.0 - expand_time(t, x)).clamp_min(0.04)
-            guided = (clean - x) / remaining
-            return torch.where(gate > 0, guided, v)
+            clean_delta = noise_alignment_delta(x, t, target_class, stats)
+            velocity_delta = float(strength) * gate * clean_delta / remaining
+            return v + velocity_delta
 
     return velocity
 
@@ -573,13 +664,10 @@ def make_combined_velocity(
                 feature_direction=direction,
                 feature_strength=float(activation_strength) * act_gate,
             )
-            clean = denoised_from_velocity(x, t, v)
-            clean = clean + float(noise_strength) * na_gate * noise_alignment_delta(
-                x, t, target_class, stats
-            )
             remaining = (1.0 - expand_time(t, x)).clamp_min(0.04)
-            corrected = (clean - x) / remaining
-            return torch.where(na_gate > 0, corrected, v)
+            clean_delta = noise_alignment_delta(x, t, target_class, stats)
+            velocity_delta = float(noise_strength) * na_gate * clean_delta / remaining
+            return v + velocity_delta
 
     return velocity
 
@@ -639,9 +727,44 @@ def timed_sample(
 
 
 def pca_project(features: torch.Tensor) -> torch.Tensor:
-    centered = features - features.mean(dim=0, keepdim=True)
+    return fit_pca_projection(features).transform(features)
+
+
+@dataclass
+class PCAProjection:
+    mean: torch.Tensor
+    components: torch.Tensor
+
+    def transform(self, features: torch.Tensor) -> torch.Tensor:
+        return (features - self.mean) @ self.components.T
+
+
+def fit_pca_projection(features: torch.Tensor, *, n_components: int = 2) -> PCAProjection:
+    """Fit display-only PCA parameters that can be reused on held-out features."""
+    mean = features.mean(dim=0, keepdim=True)
+    centered = features - mean
     _, _, vh = torch.linalg.svd(centered, full_matrices=False)
-    return centered @ vh[:2].T
+    return PCAProjection(mean=mean, components=vh[:n_components])
+
+
+def model_state_digest(model: nn.Module) -> str:
+    """Hash model tensors so notebooks can show that post-hoc sampling is frozen."""
+    digest = hashlib.sha256()
+    for name, tensor in sorted(model.state_dict().items()):
+        digest.update(name.encode("utf-8"))
+        contiguous = tensor.detach().cpu().contiguous()
+        digest.update(str(contiguous.dtype).encode("ascii"))
+        digest.update(np.asarray(contiguous.shape, dtype=np.int64).tobytes())
+        digest.update(contiguous.numpy().tobytes())
+    return digest.hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def plot_labeled_points(
@@ -669,26 +792,35 @@ def plot_labeled_points(
 def plot_trajectory_comparison(
     trajectories: Dict[str, torch.Tensor],
     *,
-    target_class: Optional[int] = None,
+    target_reference: Optional[torch.Tensor] = None,
     n_lines: int = 24,
 ) -> None:
     fig, axes = plt.subplots(1, len(trajectories), figsize=(5 * len(trajectories), 4.5), squeeze=False)
     for ax, (name, path) in zip(axes[0], trajectories.items()):
         path_np = path.detach().cpu().numpy()
+        if target_reference is not None:
+            reference_np = target_reference.detach().cpu().numpy()
+            ax.scatter(
+                reference_np[:, 0],
+                reference_np[:, 1],
+                s=8,
+                alpha=0.13,
+                color="#009E73",
+                label="target examples",
+            )
         count = min(n_lines, path_np.shape[1])
         indexes = np.linspace(0, path_np.shape[1] - 1, count, dtype=int)
         for index in indexes:
             ax.plot(path_np[:, index, 0], path_np[:, index, 1], color="#666666", alpha=0.32, lw=0.8)
         ax.scatter(path_np[-1, :, 0], path_np[-1, :, 1], s=7, alpha=0.38, color="#0072B2")
-        if target_class is not None:
-            center = CLASS_CENTERS[target_class].numpy()
-            ax.scatter(center[0], center[1], marker="x", s=70, lw=2, color=CLASS_COLORS[target_class])
         ax.set_title(name)
         ax.set_aspect("equal")
         ax.set_xlim(-4.5, 4.5)
         ax.set_ylim(-4.2, 4.5)
         ax.set_xticks([])
         ax.set_yticks([])
+        if target_reference is not None:
+            ax.legend(frameon=False, loc="upper left", fontsize=8)
     plt.tight_layout()
 
 

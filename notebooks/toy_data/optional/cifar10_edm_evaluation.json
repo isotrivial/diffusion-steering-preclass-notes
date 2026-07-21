@@ -1,0 +1,176 @@
+{
+  "manifest_path": "/data/qingsong/diffusion-steering-preclass-notes/notebooks/toy_data/optional/cifar10_bridge_manifest.json",
+  "asset_checks": {
+    "sources": {
+      "edm": "008a4e5316c8e3bfe61a62f874bddba254295afb",
+      "evaluator": "786c16252c0fc58ee9adac063f8337cc4a7a497a"
+    },
+    "files": {
+      "checkpoint": {
+        "path": "/data/qingsong/clean_edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl",
+        "sha256": "4d5dcc1f1d0d41c8934ad21626eeddbdc0460182becf9fc059a0631b1eedb4da"
+      },
+      "cifar10_test_archive": {
+        "path": "/data/qingsong/clean_edm/datasets/cifar-10-python.tar.gz",
+        "sha256": "6d958be074577803d12ecdefd02955f39262c83c16fe9348329d7fe0b5c001ce"
+      },
+      "pca_full": {
+        "path": "/data/qingsong/jetstream2_backup/My-workspace/diff_guidance/efficient_diffusion_steering/cifar10_label_guidance/filters/full_dataset.pt",
+        "sha256": "c6aa3db75213179de7af99ae0d4fe398292cb464eb1ab4b121f6befadb742bee"
+      },
+      "pca_target": {
+        "path": "/data/qingsong/jetstream2_backup/My-workspace/diff_guidance/efficient_diffusion_steering/cifar10_label_guidance/filters/class_3.pt",
+        "sha256": "0e63b81533ef0f59dbc85c30e4d8cffaeaa89598881926da5499f816ad0d6181"
+      },
+      "pca_wrong": {
+        "path": "/data/qingsong/jetstream2_backup/My-workspace/diff_guidance/efficient_diffusion_steering/cifar10_label_guidance/filters/class_8.pt",
+        "sha256": "ae6b08e416674e7cccf4c35b09e948bd34ab014e6b67c782c5872d7bc33ad848"
+      },
+      "evaluator_checkpoint": {
+        "path": "/home/qingsong/.cache/torch/hub/checkpoints/cifar10_resnet56-187c023a.pt",
+        "sha256": "187c023aee0c9cf3093a682d9447a538cbaf5489f7ae78a7df4edf2246ce380b"
+      }
+    }
+  },
+  "device": "NVIDIA RTX A6000",
+  "evaluator_test_accuracy": 0.9437000155448914,
+  "schedule": [
+    80.0,
+    57.58598472124816,
+    40.78557379650796,
+    28.37458460415684,
+    19.352452980325225,
+    12.910082380757322,
+    8.400935309099825,
+    5.315194521796383,
+    3.256821519765537,
+    1.9233398370400518,
+    1.088170636545279,
+    0.5853481231945422,
+    0.2964422844791578,
+    0.13951646873101678,
+    0.05994731123547158,
+    0.022934518372333384,
+    0.0075280199627840785,
+    0.002000000000000003,
+    0.0
+  ],
+  "target_class": 3,
+  "wrong_class": 8,
+  "strength": 4.0,
+  "metrics": {
+    "baseline": {
+      "finite": true,
+      "target_rate": 0.0859375,
+      "target_probability": 0.0868103951215744,
+      "target_feature_mean_distance": 5.021938800811768,
+      "feature_covariance_trace": 36.934295654296875,
+      "class_histogram": [
+        18,
+        31,
+        21,
+        22,
+        19,
+        37,
+        24,
+        29,
+        27,
+        28
+      ],
+      "class_histogram_entropy": 0.9896904230117798,
+      "near_duplicate_rate": 0.0,
+      "runtime_seconds": 13.230973104014993
+    },
+    "zero": {
+      "finite": true,
+      "target_rate": 0.0859375,
+      "target_probability": 0.0868103951215744,
+      "target_feature_mean_distance": 5.021938800811768,
+      "feature_covariance_trace": 36.934295654296875,
+      "class_histogram": [
+        18,
+        31,
+        21,
+        22,
+        19,
+        37,
+        24,
+        29,
+        27,
+        28
+      ],
+      "class_histogram_entropy": 0.9896904230117798,
+      "near_duplicate_rate": 0.0,
+      "runtime_seconds": 12.92838138807565
+    },
+    "target": {
+      "finite": true,
+      "target_rate": 0.32421875,
+      "target_probability": 0.32238781452178955,
+      "target_feature_mean_distance": 3.443509101867676,
+      "feature_covariance_trace": 28.274085998535156,
+      "class_histogram": [
+        5,
+        10,
+        19,
+        83,
+        9,
+        77,
+        23,
+        17,
+        7,
+        6
+      ],
+      "class_histogram_entropy": 0.7920501232147217,
+      "near_duplicate_rate": 0.0,
+      "runtime_seconds": 12.979535062331706
+    },
+    "wrong": {
+      "finite": true,
+      "target_rate": 0.00390625,
+      "target_probability": 0.0029154883231967688,
+      "target_feature_mean_distance": 7.0750203132629395,
+      "feature_covariance_trace": 24.32965660095215,
+      "class_histogram": [
+        52,
+        14,
+        4,
+        1,
+        2,
+        4,
+        0,
+        4,
+        148,
+        27
+      ],
+      "class_histogram_entropy": 0.5607778429985046,
+      "near_duplicate_rate": 0.0,
+      "runtime_seconds": 13.033736639656126
+    }
+  },
+  "target_rate_gain": 0.23828125,
+  "wrong_class_target_rate_gain": -0.08203125,
+  "paired_target_rate_gain_95ci": [
+    0.17578125,
+    0.30078125
+  ],
+  "feature_covariance_trace_ratio": 0.7655238985245356,
+  "zero_endpoint_max_abs": 0.0,
+  "deterministic_repeat_max_abs": 0.0,
+  "total_runtime_seconds": 139.61462698038667,
+  "peak_gpu_memory_gb": 2.998352527618408,
+  "checks": {
+    "evaluator_accuracy": true,
+    "all_outputs_finite": true,
+    "deterministic_repeat": true,
+    "zero_strength_identity": true,
+    "target_rate_gain": true,
+    "paired_gain_lower_bound_positive": true,
+    "target_feature_distance_improves": true,
+    "feature_diversity_preserved": true,
+    "wrong_class_is_specific_control": true,
+    "runtime_within_budget": true,
+    "memory_within_budget": true
+  },
+  "release_status": "PASS"
+}
