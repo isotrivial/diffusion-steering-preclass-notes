@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the maintained toy-data course notebooks from readable cell sources."""
+"""Build the maintained toy-data pre-class notebooks from readable cell sources."""
 
 from __future__ import annotations
 
@@ -46,10 +46,10 @@ SETUP = r'''
 import sys
 from pathlib import Path
 
-COURSE_DIR = Path.cwd()
-if not (COURSE_DIR / "toy_course.py").exists():
-    COURSE_DIR = Path("notebooks/toy_data")
-sys.path.insert(0, str(COURSE_DIR.resolve()))
+NOTES_DIR = Path.cwd()
+if not (NOTES_DIR / "toy_notes.py").exists():
+    NOTES_DIR = Path("notebooks/toy_data")
+sys.path.insert(0, str(NOTES_DIR.resolve()))
 
 from IPython import get_ipython
 
@@ -62,7 +62,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from toy_course import *
+from toy_notes import *
 
 SEED = 2026
 set_seed(SEED)
@@ -76,7 +76,7 @@ NOTEBOOKS = {
         markdown(r'''
 # 00 - From noise to data: diffusion and flow-matching foundations
 
-This notebook builds the visual vocabulary used by the rest of the course. The
+This notebook builds the visual vocabulary used by the remaining notes. The
 audience is expected to know Python and vectors, but not stochastic calculus.
 
 **Learning goals**
@@ -719,11 +719,11 @@ depends on hardware, but the computational distinction is structural:
 3. Which comparison isolates the price of inference-time backpropagation?
 '''),
     ],
-    "05_activation_steering_and_capstone.ipynb": [
+    "05_activation_steering_and_method_comparison.ipynb": [
         markdown(r'''
-# 05 - Hidden-feature steering and capstone comparison
+# 05 - Hidden-feature steering and method comparison
 
-The final notebook moves the intervention from 2D sample space into a hidden
+This note moves the intervention from 2D sample space into a hidden
 layer of the unconditional velocity network.
 
 We collect hidden features from labeled examples after forward noising, learn a
@@ -861,9 +861,9 @@ for name, velocity in methods.items():
     rows.append({"method": name, **metrics, "seconds": seconds})
     paths[name] = path
 
-capstone_table = pd.DataFrame(rows)
-capstone_table["runtime / baseline"] = capstone_table["seconds"] / capstone_table.loc[0, "seconds"]
-display(capstone_table.round(4))
+comparison_table = pd.DataFrame(rows)
+comparison_table["runtime / baseline"] = comparison_table["seconds"] / comparison_table.loc[0, "seconds"]
+display(comparison_table.round(4))
 '''),
         code(r'''
 plot_trajectory_comparison(
@@ -879,7 +879,7 @@ plot_trajectory_comparison(
 plt.show()
 
 fig, ax = plt.subplots(figsize=(7.5, 5))
-for _, row in capstone_table.iterrows():
+for _, row in comparison_table.iterrows():
     ax.scatter(row["target_swd"], row["target_rate"], s=80)
     ax.annotate(row["method"], (row["target_swd"], row["target_rate"]), xytext=(5, 4), textcoords="offset points", fontsize=9)
 ax.set(xlabel="SWD to target class (lower is better)", ylabel="target-class rate (higher is better)", title="Control-quality trade-off")
@@ -887,9 +887,10 @@ ax.grid(alpha=0.2)
 plt.show()
 '''),
         markdown(r'''
-## 3. Capstone ablation
+## 3. Further comparisons
 
-Choose one factor at a time and repeat the paired protocol:
+To explore sensitivity, vary one factor at a time while keeping the paired
+protocol fixed:
 
 1. **Collection time:** learn directions at `t = 0.40, 0.55, 0.70, 0.85`.
 2. **Intervention window:** early, middle, or late with fixed direction/strength.
@@ -897,9 +898,9 @@ Choose one factor at a time and repeat the paired protocol:
 4. **Method:** baseline, noise alignment, gradient, activation, and combined.
 5. **Robustness:** repeat the decisive comparison over three initial-noise seeds.
 
-Report target-class rate, target SWD, diversity ratio, runtime, and one paired
-trajectory figure. A method is not "best" unless the quality constraint used to
-select it is stated.
+The useful quantities to compare are target-class rate, target SWD, diversity
+ratio, runtime, and paired trajectories. A method is not "best" without stating
+the quality constraint used for comparison.
 
 ## Paper bridge
 
@@ -911,7 +912,7 @@ select it is stated.
 | Online activation edit | fixed feature direction over a time window | no U-Net feature map or amplification pass |
 | Gradient-free inference | yes for noise/activation methods | gradient baseline still backpropagates |
 
-**Final questions**
+**Questions for discussion**
 
 1. Does probe accuracy predict steering success at the same collection time?
 2. Over which times is the learned direction stable enough to reuse?

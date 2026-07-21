@@ -6,10 +6,10 @@ from pathlib import Path
 import torch
 
 
-COURSE_DIR = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(COURSE_DIR))
+NOTES_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(NOTES_DIR))
 
-from toy_course import (  # noqa: E402
+from toy_notes import (  # noqa: E402
     BASE_STD,
     VelocityMLP,
     additive_noise_coordinates,

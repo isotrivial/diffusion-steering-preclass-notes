@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VALIDATION_DIR="${TOY_COURSE_VALIDATION_DIR:-.validation/toy-course}"
-VENV_DIR="${TOY_COURSE_VENV_DIR:-.venv-toy-course}"
+VALIDATION_DIR="${TOY_NOTES_VALIDATION_DIR:-.validation/toy-notes}"
+VENV_DIR="${TOY_NOTES_VENV_DIR:-.venv-toy-notes}"
 
 mkdir -p "${VALIDATION_DIR}"
 python3 -m venv --system-site-packages "${VENV_DIR}"
 source "${VENV_DIR}/bin/activate"
 
 python -m pip install --disable-pip-version-check --quiet \
-  -r notebooks/toy_data/requirements-course.txt
+  -r notebooks/toy_data/requirements-notes.txt
 
 python - <<'PY'
 import json
@@ -27,10 +27,10 @@ summary = {
 print(json.dumps(summary, indent=2))
 PY
 
-python -m pytest -q notebooks/toy_data/tests/test_toy_course.py \
+python -m pytest -q notebooks/toy_data/tests/test_toy_notes.py \
   2>&1 | tee "${VALIDATION_DIR}/unit-tests.log"
 
-python scripts/run_toy_course_notebooks.py \
+python scripts/run_toy_notes.py \
   --output-dir "${VALIDATION_DIR}/executed" \
   2>&1 | tee "${VALIDATION_DIR}/notebooks.log"
 

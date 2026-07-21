@@ -117,10 +117,9 @@ Notebooks are available to quickly train, evaluate models and create plots.
 
 ### Toy-data notebooks
 
-See [`notebooks/toy_data/README.md`](notebooks/toy_data/README.md) for a six-part
-undergraduate sequence covering flow-matching training, deterministic samplers,
+See [`notebooks/toy_data/README.md`](notebooks/toy_data/README.md) for six
+pre-class notebooks covering flow-matching training, deterministic samplers,
 Gaussian/PCA denoisers, class-energy gradients, and hidden-feature steering.
-The maintained course uses an unconditional 2D model and distribution-level
-class controls; it does not use attraction toward a chosen point. Teaching notes
-and assessments are in
-[`notebooks/toy_data/COURSE_GUIDE.md`](notebooks/toy_data/COURSE_GUIDE.md).
+They use an unconditional 2D model and distribution-level class controls; they
+do not use attraction toward a chosen point. The suggested reading order is in
+[`notebooks/toy_data/PRECLASS_NOTES.md`](notebooks/toy_data/PRECLASS_NOTES.md).

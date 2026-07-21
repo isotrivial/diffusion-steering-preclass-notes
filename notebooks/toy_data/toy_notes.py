@@ -1,4 +1,4 @@
-"""Shared, small utilities for the toy diffusion and flow-matching course.
+"""Shared utilities for the toy diffusion and flow-matching pre-class notes.
 
 The notebooks keep the conceptual code visible and use this module for repeated
 training, sampling, metrics, and plotting.  The generative model is always
@@ -22,8 +22,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-COURSE_DIR = Path(__file__).resolve().parent
-ARTIFACT_DIR = COURSE_DIR / "artifacts"
+NOTES_DIR = Path(__file__).resolve().parent
+ARTIFACT_DIR = NOTES_DIR / "artifacts"
 CHECKPOINT_PATH = ARTIFACT_DIR / "toy_flow_model.pt"
 MODEL_FORMAT_VERSION = 2
 
@@ -225,7 +225,7 @@ def load_or_train_model(
             return model, [float(v) for v in payload.get("losses", [])], False
 
     if steps is None:
-        steps = int(os.environ.get("TOY_COURSE_TRAIN_STEPS", "2500"))
+        steps = int(os.environ.get("TOY_NOTES_TRAIN_STEPS", "2500"))
     model = VelocityMLP().to(device)
     losses = train_flow_model(model, steps=steps)
     save_checkpoint(model, losses, checkpoint_path)

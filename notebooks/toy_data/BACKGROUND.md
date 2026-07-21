@@ -1,13 +1,12 @@
 # Background Notes
 
-This note supplies the minimum derivations needed by the notebooks. The main
-course path stays visual; these details are available when students ask why a
-formula is valid.
+This file supplies the minimum derivations needed by the notebooks. The main
+pre-class notes stay visual; these details explain why the formulas are valid.
 
 ## 1. Linear I-CFM path
 
-Sample independent endpoints, using base standard deviation `s = 1.8` in this
-course:
+Sample independent endpoints, using base standard deviation `s = 1.8` in these
+notebooks:
 
 ```text
 x_noise = s * epsilon,   epsilon ~ N(0,I)
@@ -74,7 +73,7 @@ sigma_eff = s (1-t) / t.
 
 The flow state can therefore be viewed in additive standard-Gaussian-noise
 coordinates. Small `t` corresponds to large `sigma_eff` and high noise. Keeping
-the factor `s` is necessary because the course base distribution is not unit
+the factor `s` is necessary because the base distribution used here is not unit
 variance.
 
 ## 5. Gaussian/PCA denoiser
@@ -95,7 +94,7 @@ Along directions with high data variance, the denoiser trusts the observation
 more. Along low-variance directions, it shrinks more strongly toward the mean.
 In high dimensions, the eigendecomposition of `C` gives the usual PCA form.
 
-The course noise-alignment signal is
+The notebook noise-alignment signal is
 
 ```text
 Delta D = D_target_class - D_full_data.
@@ -113,7 +112,7 @@ grad_x log s_c(x)
 ```
 
 is the local direction that most rapidly increases the target log score. In the
-course, the score is evaluated on `D_theta(x_t,t)`, so automatic differentiation
+notebooks, the score is evaluated on `D_theta(x_t,t)`, so automatic differentiation
 passes through both the clean estimate and velocity model at every active solver
 evaluation.
 
