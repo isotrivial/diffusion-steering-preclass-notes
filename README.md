@@ -15,10 +15,10 @@ teaching sequence itself uses small ordinary MLPs.
 
 | # | Read with outputs | Main idea |
 |---|---|---|
-| 00 | [Generative-model and flow-matching foundations](notebooks/toy_data/executed/00_diffusion_and_flow_matching_foundations.ipynb) ([source](notebooks/toy_data/00_diffusion_and_flow_matching_foundations.ipynb)) | Sampling versus reconstruction, training versus generation, noise, vector fields, and flow-matching targets |
-| 01 | [Train an unconditional flow model](notebooks/toy_data/executed/01_train_unconditional_flow_matching.ipynb) ([source](notebooks/toy_data/01_train_unconditional_flow_matching.ipynb)) | Train an unlabeled model, visualize SWD, and inspect a learned eight-mode flow map |
-| 02 | [Denoisers and deterministic samplers](notebooks/toy_data/executed/02_denoisers_and_deterministic_samplers.ipynb) ([source](notebooks/toy_data/02_denoisers_and_deterministic_samplers.ipynb)) | Convert velocity to a denoised estimate; compare Euler, Heun, and RK4 |
-| 03 | [Gaussian/PCA denoisers and noise alignment](notebooks/toy_data/executed/03_gaussian_denoisers_and_noise_alignment.ipynb) ([source](notebooks/toy_data/03_gaussian_denoisers_and_noise_alignment.ipynb)) | Use class-minus-full Gaussian/PCA denoisers for coarse steering |
+| 00 | [Generative-model and flow-matching foundations](notebooks/toy_data/executed/00_diffusion_and_flow_matching_foundations.ipynb) ([source](notebooks/toy_data/00_diffusion_and_flow_matching_foundations.ipynb)) | See how data, base noise, a learned field, and a sampler form a generator |
+| 01 | [Train an unconditional flow model](notebooks/toy_data/executed/01_train_unconditional_flow_matching.ipynb) ([source](notebooks/toy_data/01_train_unconditional_flow_matching.ipynb)) | Train on three clusters, a continuous circle, and eight modes; visualize empirical Wasserstein matching |
+| 02 | [Denoisers and deterministic samplers](notebooks/toy_data/executed/02_denoisers_and_deterministic_samplers.ipynb) ([source](notebooks/toy_data/02_denoisers_and_deterministic_samplers.ipynb)) | Derive the conditional-average denoiser from velocity; compare Euler, Heun, and RK4 |
+| 03 | [Gaussian/PCA denoisers and noise alignment](notebooks/toy_data/executed/03_gaussian_denoisers_and_noise_alignment.ipynb) ([source](notebooks/toy_data/03_gaussian_denoisers_and_noise_alignment.ipynb)) | Denoise held-out MNIST images, then use class-minus-full Gaussian/PCA estimates for coarse steering |
 | 04 | [Training-free gradient guidance](notebooks/toy_data/executed/04_training_free_gradient_guidance.ipynb) ([source](notebooks/toy_data/04_training_free_gradient_guidance.ipynb)) | Differentiate a class objective during sampling |
 | 05 | [Activation steering and method comparison](notebooks/toy_data/executed/05_activation_steering_and_method_comparison.ipynb) ([source](notebooks/toy_data/05_activation_steering_and_method_comparison.ipynb)) | See where activation edits act, probe hidden features, and compare matched interventions |
 
@@ -34,16 +34,19 @@ There is no attraction-to-a-point controller in the maintained sequence. A
 class is represented by examples, fitted distributions, class objectives, or
 held-out activation directions, never by a chosen target point.
 
-## Optional CIFAR-10 bridge
+## CIFAR-10 image experiment
 
-The optional image notebook uses NVIDIA's official **unconditional** CIFAR-10
-EDM checkpoint, deterministic 18-step sampling, and a class-minus-full PCA
-denoiser correction. It includes paired baseline, zero-strength, target-class,
-and wrong-class controls. Its manifest-locked A6000 run passed all predeclared
-checks. It is intentionally separate from the six core notes.
+The toy notes make each mechanism visible. The image experiment then asks
+whether a distribution-level correction has a measurable effect in a real
+pretrained nonlinear generator. It uses NVIDIA's official **unconditional**
+CIFAR-10 EDM checkpoint, deterministic 18-step sampling, and a class-minus-full
+PCA denoiser correction. It includes paired baseline, zero-strength,
+target-class, and wrong-class controls. Its manifest-locked A6000 run passed all
+predeclared checks.
 
-See the [optional CIFAR-10 notebook](notebooks/toy_data/optional/cifar10_steering_with_unconditional_edm.ipynb)
-and [bridge contract](notebooks/toy_data/optional/CIFAR10_BRIDGE.md).
+Read the [CIFAR-10 notebook with outputs](notebooks/toy_data/executed/cifar10_steering_with_unconditional_edm.ipynb),
+its [source notebook](notebooks/toy_data/optional/cifar10_steering_with_unconditional_edm.ipynb),
+and the [experiment contract](notebooks/toy_data/optional/CIFAR10_BRIDGE.md).
 
 ## Run the core notes
 
@@ -60,8 +63,8 @@ machine-specific execution report is ignored. Default training budgets are
 evidence settings, while reduced environment-variable overrides are only smoke
 tests.
 
-The optional CIFAR-10 notebook needs the external assets and GPU environment
-locked by its manifest. On the UCSD host:
+The CIFAR-10 notebook needs the external assets and GPU environment locked by
+its manifest. On the UCSD host:
 
 ```bash
 bash scripts/validate_cifar10_edm_bridge_ucsd.sh
@@ -71,7 +74,7 @@ bash scripts/validate_cifar10_edm_bridge_ucsd.sh
 
 - `notebooks/toy_data/`: maintained notes, reading material, tests, and shared helpers;
 - `notebooks/toy_data/executed/`: published snapshots with inline figures and tables;
-- `notebooks/toy_data/optional/`: manifest-gated image bridge;
+- `notebooks/toy_data/optional/`: manifest and source code for the image experiment;
 - `scripts/build_toy_notes.py`: readable source for the six generated notebooks;
 - `scripts/run_toy_notes.py`: ordered notebook runner;
 - `scripts/validate_toy_notes_ucsd.sh`: full core validation on one GPU;
@@ -81,6 +84,7 @@ bash scripts/validate_cifar10_edm_bridge_ucsd.sh
 
 - Lipman et al., [*Flow Matching for Generative Modeling*](https://arxiv.org/abs/2210.02747).
 - Karras et al., [*Elucidating the Design Space of Diffusion-Based Generative Models*](https://arxiv.org/abs/2206.00364).
+- Li, Dai, and Qu, [*Understanding Generalizability of Diffusion Models Requires Rethinking the Hidden Gaussian Structure*](https://arxiv.org/abs/2410.24060).
 - Song, Meng, and Ermon, [*Denoising Diffusion Implicit Models*](https://arxiv.org/abs/2010.02502).
 - Wang, Belkin, and Wang, [*General and Efficient Steering of Diffusion Models*](https://arxiv.org/abs/2602.11395).
 - Buhmann et al., [*EPiC-ly Fast Particle Cloud Generation with Flow-Matching and Diffusion*](https://arxiv.org/abs/2310.00049), retained upstream code provenance.

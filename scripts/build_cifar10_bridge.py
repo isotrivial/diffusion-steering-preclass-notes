@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the optional unconditional-EDM CIFAR-10 steering notebook."""
+"""Build the unconditional-EDM CIFAR-10 steering notebook."""
 
 from __future__ import annotations
 
@@ -30,23 +30,18 @@ def code(source: str) -> dict:
 cells = [
     markdown(
         r"""
-# Optional image bridge: steering an unconditional CIFAR-10 EDM model
+# Image experiment: steering an unconditional CIFAR-10 EDM model
 
-This notebook checks whether the distribution-level idea from the toy notes
-still produces measurable class control for real images. It uses NVIDIA's
-**unconditional** CIFAR-10 EDM checkpoint. The network never receives a class
-label.
+The 2D notes make flow, denoising, and steering visible, but a small MLP is not
+evidence that the same idea matters in an image generator. Here we test a
+class-minus-full PCA denoiser correction inside NVIDIA's **unconditional**
+CIFAR-10 EDM checkpoint. The network never receives a class label.
 
-**Questions**
-
-1. What does the EDM network estimate at each noise level?
-2. Can a class-minus-full PCA denoiser correction alter that estimate without
-   retraining the generator?
-3. Does the change survive paired, zero-strength, wrong-class, diversity, and
-   frozen-evaluator controls?
-
-This is an optional bridge, not a seventh core note. It requires the external
-assets locked in `cifar10_bridge_manifest.json` and a CUDA GPU.
+Paired baseline, zero-strength, wrong-class, diversity, and frozen-evaluator
+controls ask whether any class change is attributable to the correction rather
+than sampling luck or a generic image perturbation. Re-execution requires the
+external assets locked in `cifar10_bridge_manifest.json` and a CUDA GPU; the
+published executed copy contains the figures and measured results.
 """
     ),
     code(
@@ -241,7 +236,7 @@ print("paired gain 95% interval:", [round(value, 3) for value in result["paired_
 print("wrong-class target-rate gain:", f"{result['wrong_class_target_rate_gain']:+.3f}")
 print("zero-strength endpoint max |difference|:", f"{result['zero_endpoint_max_abs']:.3e}")
 print("deterministic repeat max |difference|:", f"{result['deterministic_repeat_max_abs']:.3e}")
-print("CIFAR-10 EDM bridge release verdict:", result["release_status"])
+print("CIFAR-10 EDM image experiment verdict:", result["release_status"])
 """
     ),
     markdown(
@@ -261,6 +256,7 @@ probe, matched shuffled direction, and its own evaluation.
 **Sources**
 
 - Karras et al., [*Elucidating the Design Space of Diffusion-Based Generative Models*](https://arxiv.org/abs/2206.00364).
+- Li, Dai, and Qu, [*Understanding Generalizability of Diffusion Models Requires Rethinking the Hidden Gaussian Structure*](https://arxiv.org/abs/2410.24060).
 - [Official NVIDIA EDM implementation](https://github.com/NVlabs/edm).
 - [CIFAR pretrained evaluator source](https://github.com/chenyaofo/pytorch-cifar-models).
 """

@@ -88,6 +88,7 @@ notebooks/toy_data/executed/*
 !notebooks/toy_data/executed/03_gaussian_denoisers_and_noise_alignment.ipynb
 !notebooks/toy_data/executed/04_training_free_gradient_guidance.ipynb
 !notebooks/toy_data/executed/05_activation_steering_and_method_comparison.ipynb
+!notebooks/toy_data/executed/cifar10_steering_with_unconditional_edm.ipynb
 notebooks/toy_data/optional/executed/
 .external/
 .validation/

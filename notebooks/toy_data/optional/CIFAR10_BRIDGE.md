@@ -1,12 +1,12 @@
-# Optional CIFAR-10 Steering Bridge
+# CIFAR-10 Image Steering Experiment
 
 ## Status
 
 The bridge is implemented as
-`cifar10_steering_with_unconditional_edm.ipynb` and remains separate from the
-six core pre-class notes. It passed the manifest-locked A6000 validation on
-2026-07-21. The complete machine-readable result is preserved in
-`cifar10_edm_evaluation.json`.
+`cifar10_steering_with_unconditional_edm.ipynb`. It follows the six lightweight
+notes as the image-scale test of their Gaussian/PCA steering idea. It passed the
+manifest-locked A6000 validation on 2026-07-21. The complete machine-readable
+result is preserved in `cifar10_edm_evaluation.json`.
 
 ## Locked generator
 
@@ -21,6 +21,12 @@ The notebook uses NVIDIA's official unconditional CIFAR-10 VP checkpoint:
 The network has `label_dim=0`. It cannot receive a CIFAR class label. NVIDIA's
 EDM code and pretrained material use the CC BY-NC-SA 4.0 license, so this bridge
 is intended for noncommercial teaching and research.
+
+The motivation for this experiment is not that a Gaussian image model is a
+complete generator. It is that coarse covariance information may remain useful
+when the nonlinear EDM denoiser is still operating at high noise. This connects
+the MNIST posterior-mean illustration to a real pretrained diffusion model and
+the Gaussian-structure evidence of [Li, Dai, and Qu](https://arxiv.org/abs/2410.24060).
 
 ## Steering mechanism
 

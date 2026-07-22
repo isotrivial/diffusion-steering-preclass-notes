@@ -7,11 +7,13 @@ unconditional; class labels are used only by post-hoc steering methods.
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import math
 import os
 import random
 import time
-import hashlib
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Optional, Tuple
@@ -21,12 +23,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from scipy.optimize import linear_sum_assignment
 
 
 NOTES_DIR = Path(__file__).resolve().parent
 ARTIFACT_DIR = NOTES_DIR / "artifacts"
 CHECKPOINT_PATH = ARTIFACT_DIR / "toy_flow_model.pt"
 EIGHT_GAUSSIAN_CHECKPOINT_PATH = ARTIFACT_DIR / "eight_gaussian_flow_model.pt"
+CIRCLE_CHECKPOINT_PATH = ARTIFACT_DIR / "circle_flow_model.pt"
 MODEL_FORMAT_VERSION = 2
 
 CLASS_NAMES = ("left", "right", "top")
@@ -40,6 +44,8 @@ CLASS_SCALES = torch.tensor(
 )
 CLASS_ANGLES = torch.tensor([0.35, -0.45, 0.0], dtype=torch.float32)
 EIGHT_GAUSSIAN_STD = 0.20
+CIRCLE_RADIUS = 3.0
+CIRCLE_RADIAL_STD = 0.12
 _EIGHT_GAUSSIAN_ANGLES = torch.arange(8, dtype=torch.float32) * (2.0 * math.pi / 8.0)
 EIGHT_GAUSSIAN_CENTERS = 3.2 * torch.stack(
     [torch.cos(_EIGHT_GAUSSIAN_ANGLES), torch.sin(_EIGHT_GAUSSIAN_ANGLES)], dim=1
@@ -54,6 +60,13 @@ EIGHT_GAUSSIAN_COLORS = (
     "#332288",
     "#777777",
 )
+MNIST_MIRROR = "https://ossci-datasets.s3.amazonaws.com/mnist"
+MNIST_FILES = {
+    "train_images": "train-images-idx3-ubyte.gz",
+    "train_labels": "train-labels-idx1-ubyte.gz",
+    "test_images": "t10k-images-idx3-ubyte.gz",
+    "test_labels": "t10k-labels-idx1-ubyte.gz",
+}
 
 
 def choose_device() -> torch.device:
@@ -131,14 +144,86 @@ def sample_eight_gaussians(
     return points, labels
 
 
+def sample_noisy_circle(
+    n: int,
+    *,
+    device: Optional[torch.device] = None,
+    labels: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Sample a continuous noisy circle; labels are angular bins for plotting only."""
+    device = device or choose_device()
+    if labels is None:
+        angles = 2.0 * math.pi * torch.rand(n, device=device)
+        labels = torch.floor(8.0 * angles / (2.0 * math.pi)).long().clamp_max(7)
+    else:
+        labels = labels.to(device=device, dtype=torch.long)
+        n = labels.numel()
+        angles = (labels + torch.rand(n, device=device)) * (2.0 * math.pi / 8.0)
+    radii = CIRCLE_RADIUS + CIRCLE_RADIAL_STD * torch.randn(n, device=device)
+    points = radii[:, None] * torch.stack([torch.cos(angles), torch.sin(angles)], dim=1)
+    return points, labels
+
+
 def sample_base(n: int, *, device: Optional[torch.device] = None) -> torch.Tensor:
     return BASE_STD * torch.randn(n, 2, device=device or choose_device())
+
+
+def _resolve_mnist_file(data_dir: Path, filename: str, *, download: bool) -> Path:
+    compressed = data_dir / filename
+    uncompressed = data_dir / filename.removesuffix(".gz")
+    if uncompressed.exists():
+        return uncompressed
+    if compressed.exists():
+        return compressed
+    if not download:
+        raise FileNotFoundError(f"missing MNIST file: {compressed}")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    urllib.request.urlretrieve(f"{MNIST_MIRROR}/{filename}", compressed)
+    return compressed
+
+
+def _read_mnist_idx(path: Path) -> torch.Tensor:
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rb") as handle:
+        payload = handle.read()
+    magic = int(np.frombuffer(payload[:4], dtype=">i4")[0])
+    if magic == 2051:
+        count, rows, columns = np.frombuffer(payload[4:16], dtype=">i4")
+        values = np.frombuffer(payload, dtype=np.uint8, offset=16)
+        return torch.from_numpy(values.copy()).reshape(int(count), int(rows) * int(columns))
+    if magic == 2049:
+        count = int(np.frombuffer(payload[4:8], dtype=">i4")[0])
+        values = np.frombuffer(payload, dtype=np.uint8, offset=8, count=count)
+        return torch.from_numpy(values.copy()).long()
+    raise ValueError(f"unsupported MNIST IDX magic number {magic} in {path}")
+
+
+def load_mnist_split(
+    *,
+    train: bool,
+    data_dir: Optional[Path | str] = None,
+    device: Optional[torch.device] = None,
+    download: bool = True,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Load flattened MNIST without importing torchvision."""
+    if data_dir is None:
+        data_dir = Path(os.environ.get("MNIST_DATA_DIR", ARTIFACT_DIR / "mnist"))
+    data_dir = Path(data_dir)
+    prefix = "train" if train else "test"
+    image_path = _resolve_mnist_file(data_dir, MNIST_FILES[f"{prefix}_images"], download=download)
+    label_path = _resolve_mnist_file(data_dir, MNIST_FILES[f"{prefix}_labels"], download=download)
+    images = _read_mnist_idx(image_path).float().div_(255.0)
+    labels = _read_mnist_idx(label_path)
+    if device is not None:
+        images = images.to(device)
+        labels = labels.to(device)
+    return images, labels
 
 
 def forward_noising(
     clean: torch.Tensor, t: torch.Tensor, noise: Optional[torch.Tensor] = None
 ) -> torch.Tensor:
-    """Linear noising path: x_t = t*x_data + (1-t)*epsilon."""
+    """Linear noising path: x_t = t*x_data + (1-t)*x_noise."""
     if noise is None:
         noise = sample_base(clean.shape[0], device=clean.device)
     t = expand_time(t, clean)
@@ -326,6 +411,59 @@ def load_or_train_eight_gaussian_model(
     return model, losses, True
 
 
+def load_or_train_circle_model(
+    *,
+    device: Optional[torch.device] = None,
+    steps: Optional[int] = None,
+    force_retrain: bool = False,
+    checkpoint_path: Path = CIRCLE_CHECKPOINT_PATH,
+) -> Tuple[VelocityMLP, list[float], bool]:
+    """Load or train the separate unconditional model for the circle example."""
+    device = device or choose_device()
+    if steps is None:
+        steps = int(os.environ.get("TOY_NOTES_CIRCLE_STEPS", "3000"))
+    if checkpoint_path.exists() and not force_retrain:
+        payload = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        if (
+            payload.get("format_version") == MODEL_FORMAT_VERSION
+            and payload.get("dataset") == "noisy_circle"
+            and payload.get("training_steps") == steps
+            and payload.get("radius") == CIRCLE_RADIUS
+            and payload.get("radial_std") == CIRCLE_RADIAL_STD
+            and payload.get("base_std") == BASE_STD
+        ):
+            model = VelocityMLP(hidden_dim=int(payload["hidden_dim"])).to(device)
+            model.load_state_dict(payload["model_state"])
+            model.eval()
+            return model, [float(v) for v in payload.get("losses", [])], False
+
+    model = VelocityMLP().to(device)
+    training_seed = 2116
+    losses = train_flow_model(
+        model,
+        steps=steps,
+        data_sampler=sample_noisy_circle,
+        seed=training_seed,
+    )
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "format_version": MODEL_FORMAT_VERSION,
+            "dataset": "noisy_circle",
+            "hidden_dim": model.hidden_dim,
+            "model_state": model.state_dict(),
+            "losses": losses,
+            "radius": CIRCLE_RADIUS,
+            "radial_std": CIRCLE_RADIAL_STD,
+            "base_std": BASE_STD,
+            "training_seed": training_seed,
+            "training_steps": steps,
+        },
+        checkpoint_path,
+    )
+    return model, losses, True
+
+
 VelocityFunction = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
 
@@ -466,6 +604,54 @@ def gaussian_denoise(
     centered = (y - mean).unsqueeze(-1)
     solved = torch.linalg.solve(system, centered)
     return mean + (cov @ solved).squeeze(-1)
+
+
+@dataclass
+class LowRankGaussianStats:
+    mean: torch.Tensor
+    components: torch.Tensor
+    variances: torch.Tensor
+
+    def to(self, device: torch.device) -> "LowRankGaussianStats":
+        return LowRankGaussianStats(
+            self.mean.to(device),
+            self.components.to(device),
+            self.variances.to(device),
+        )
+
+
+def fit_low_rank_gaussian(samples: torch.Tensor, *, rank: int = 64) -> LowRankGaussianStats:
+    """Fit a Gaussian using the leading covariance eigenvectors."""
+    if samples.ndim != 2 or samples.shape[0] < 2:
+        raise ValueError("samples must have shape (n, dimension) with n >= 2")
+    rank = min(int(rank), samples.shape[0] - 1, samples.shape[1])
+    if rank < 1:
+        raise ValueError("rank must be positive")
+    samples = samples.float()
+    mean = samples.mean(dim=0)
+    centered = samples - mean
+    q = min(rank + 8, samples.shape[0] - 1, samples.shape[1])
+    _, singular_values, components = torch.pca_lowrank(
+        centered, q=q, center=False, niter=3
+    )
+    variances = singular_values[:rank].square() / (samples.shape[0] - 1)
+    return LowRankGaussianStats(mean, components[:, :rank], variances)
+
+
+def low_rank_gaussian_denoise(
+    observations: torch.Tensor,
+    sigma: torch.Tensor | float,
+    stats: LowRankGaussianStats,
+) -> torch.Tensor:
+    """Posterior mean under a low-rank Gaussian image model."""
+    stats = stats.to(observations.device)
+    centered = observations - stats.mean
+    coordinates = centered @ stats.components
+    sigma_squared = expand_time(sigma, observations).square()
+    shrinkage = stats.variances.reshape(1, -1) / (
+        stats.variances.reshape(1, -1) + sigma_squared
+    )
+    return stats.mean + (coordinates * shrinkage) @ stats.components.T
 
 
 def noise_alignment_delta(
@@ -672,17 +858,21 @@ def make_combined_velocity(
     return velocity
 
 
-def sliced_wasserstein(
-    samples: torch.Tensor, reference: torch.Tensor, *, n_projections: int = 64
+def wasserstein_distance(
+    samples: torch.Tensor, reference: torch.Tensor, *, max_samples: int = 256
 ) -> float:
-    n = min(samples.shape[0], reference.shape[0])
-    x = samples[:n].float()
-    y = reference[:n].to(x).float()
-    angles = torch.arange(n_projections, device=x.device) * math.pi / n_projections
-    directions = torch.stack([torch.cos(angles), torch.sin(angles)], dim=1)
-    x_proj = torch.sort(x @ directions.T, dim=0).values
-    y_proj = torch.sort(y @ directions.T, dim=0).values
-    return float(torch.sqrt(torch.mean((x_proj - y_proj).square())).cpu())
+    """Finite-sample Wasserstein-1 estimate from minimum-cost point matching."""
+    n = min(samples.shape[0], reference.shape[0], int(max_samples))
+    if n < 1:
+        raise ValueError("both sample sets must be nonempty")
+    sample_indexes = torch.linspace(0, samples.shape[0] - 1, n).round().long()
+    reference_indexes = torch.linspace(0, reference.shape[0] - 1, n).round().long()
+    x = samples.detach().float()[sample_indexes.to(samples.device)]
+    y_all = reference.detach().to(samples.device).float()
+    y = y_all[reference_indexes.to(samples.device)]
+    costs = torch.cdist(x, y).cpu().numpy()
+    rows, columns = linear_sum_assignment(costs)
+    return float(costs[rows, columns].mean())
 
 
 def evaluate_samples(
@@ -704,7 +894,7 @@ def evaluate_samples(
     diversity_ratio = float((sample_trace / target_trace.clamp_min(1e-8)).cpu())
     return {
         "target_rate": target_rate,
-        "target_swd": sliced_wasserstein(samples, target_reference),
+        "target_wasserstein": wasserstein_distance(samples, target_reference),
         "mean_error": mean_error,
         "diversity_ratio": diversity_ratio,
     }

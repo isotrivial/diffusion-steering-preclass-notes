@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the optional CIFAR-10 EDM bridge and preserve its output."""
+"""Execute the CIFAR-10 EDM image experiment and preserve its output."""
 
 from __future__ import annotations
 
