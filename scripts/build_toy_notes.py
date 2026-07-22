@@ -81,10 +81,11 @@ audience is expected to know Python and vectors, but not stochastic calculus.
 
 **Learning goals**
 
-1. Recognize a forward noising path and a reverse generative path.
-2. Read a time-dependent vector field as arrows that move points.
-3. Explain the flow-matching training pair `(x_t, x_data - x_noise)`.
-4. Distinguish a model, a denoiser, and a numerical sampler.
+1. Explain what a generative model learns and distinguish sampling from reconstruction.
+2. Recognize a forward noising path and a reverse generative path.
+3. Read a time-dependent vector field as arrows that move points.
+4. Explain the flow-matching training pair `(x_t, x_data - x_noise)`.
+5. Distinguish a model, a denoiser, and a numerical sampler.
 
 The toy dataset has three labeled clusters, but the generative model in later
 notebooks will be trained **without labels**. Labels are retained only to test
@@ -92,11 +93,100 @@ post-hoc steering.
 '''),
         code(SETUP),
         markdown(r'''
-## 1. A dataset we can see
+## 1. What is a generative model?
 
-Images live in thousands or millions of dimensions. Here every sample has only
-two coordinates, so a scatter plot shows the complete data distribution. The
-three colors play the role of semantic classes.
+A generative model learns a **sampling procedure**. It is given a finite set of
+training examples and learns how to create new samples with similar
+distribution-level structure. This differs from a classifier, which receives a
+sample and predicts a label, and from reconstruction, which estimates the clean
+version of one particular observed item.
+
+For the flow model in these notes:
+
+- an easy source distribution supplies fresh Gaussian noise;
+- a neural network learns a time-dependent velocity;
+- an ODE sampler follows that velocity from noise to a generated endpoint.
+
+The neural network alone is therefore not the complete generator. The source
+distribution, trained velocity model, and sampler work together. During
+generation there is no paired clean target to reconstruct: each fresh noise
+seed starts a new sample.
+'''),
+        code(r'''
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+def process_box(ax, xy, width, height, text, color):
+    patch = FancyBboxPatch(
+        xy, width, height,
+        boxstyle="round,pad=0.02,rounding_size=0.02",
+        facecolor=color, edgecolor="#333333", linewidth=1.1,
+    )
+    ax.add_patch(patch)
+    ax.text(xy[0] + width / 2, xy[1] + height / 2, text, ha="center", va="center", fontsize=10)
+
+def process_arrow(ax, start, end):
+    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=15, linewidth=1.4, color="#333333"))
+
+fig, axes = plt.subplots(3, 1, figsize=(11.5, 8.0))
+for ax in axes:
+    ax.set(xlim=(0, 1), ylim=(0, 1))
+    ax.axis("off")
+
+axes[0].set_title("Training: use examples to learn a reusable velocity rule", loc="left", fontsize=12)
+process_box(axes[0], (0.02, 0.56), 0.20, 0.25, "data examples\n$x_{data}$", "#D9EAD3")
+process_box(axes[0], (0.02, 0.13), 0.20, 0.25, "noise samples\n$x_{noise}$", "#E7E6E6")
+process_box(axes[0], (0.36, 0.34), 0.25, 0.28, "build a training pair\n$(x_t, x_{data}-x_{noise})$", "#FCE5CD")
+process_box(axes[0], (0.75, 0.34), 0.21, 0.28, "fit velocity model\n$v_\\theta(t,x_t)$", "#CFE2F3")
+process_arrow(axes[0], (0.22, 0.68), (0.36, 0.51))
+process_arrow(axes[0], (0.22, 0.25), (0.36, 0.45))
+process_arrow(axes[0], (0.61, 0.48), (0.75, 0.48))
+axes[0].text(0.02, 0.02, "The network input contains $(t,x_t)$, not class labels.", fontsize=9, color="#555555")
+
+axes[1].set_title("Generation: start from fresh noise; no clean target is supplied", loc="left", fontsize=12)
+process_box(axes[1], (0.02, 0.34), 0.20, 0.28, "fresh noise seed\n$x_{noise}$", "#E7E6E6")
+process_box(axes[1], (0.38, 0.34), 0.25, 0.28, "frozen $v_\\theta$\n+ ODE sampler", "#CFE2F3")
+process_box(axes[1], (0.78, 0.34), 0.18, 0.28, "new generated\nsample", "#EAD1DC")
+process_arrow(axes[1], (0.22, 0.48), (0.38, 0.48))
+process_arrow(axes[1], (0.63, 0.48), (0.78, 0.48))
+axes[1].text(0.02, 0.12, "Different seeds provide diversity.", fontsize=9, color="#555555")
+axes[1].text(0.66, 0.12, "Same seed + same settings = same endpoint.", fontsize=9, color="#555555")
+
+axes[2].set_title("Reconstruction (contrast): estimate one particular observed item", loc="left", fontsize=12)
+process_box(axes[2], (0.02, 0.34), 0.24, 0.28, "corrupted observation\nof one item", "#E7E6E6")
+process_box(axes[2], (0.39, 0.34), 0.22, 0.28, "reconstruction\nprocedure", "#D9EAD3")
+process_box(axes[2], (0.76, 0.34), 0.20, 0.28, "estimate of\nthat same item", "#FCE5CD")
+process_arrow(axes[2], (0.26, 0.48), (0.39, 0.48))
+process_arrow(axes[2], (0.61, 0.48), (0.76, 0.48))
+axes[2].text(0.02, 0.12, "This is not the generation task used in this series.", fontsize=9, color="#555555")
+
+fig.suptitle("Training, generative sampling, and reconstruction", fontsize=14, y=1.01)
+plt.tight_layout()
+plt.show()
+'''),
+        markdown(r'''
+### Unconditional, conditional, and post-hoc control
+
+- An **unconditional** generator models all training examples without receiving
+  a requested class. That is the model trained here.
+- A **conditional** generator receives extra information, such as a class label
+  or text prompt, during training and generation.
+- **Post-hoc steering** keeps a trained generator frozen and modifies the
+  sampling computation. Notebooks `03`--`05` study this third setting.
+
+Random noise is useful because it is easy to sample and supplies a different
+starting state for each output. A deterministic sampler can still generate a
+diverse collection: it maps different initial noise seeds to different
+endpoints.
+'''),
+        markdown(r'''
+## 2. A dataset we can see
+
+A probability distribution describes which regions are likely and how often
+different kinds of samples occur. Images live in thousands or millions of
+dimensions, where that structure is difficult to draw. Here every sample has
+only two coordinates, so a large scatter plot makes cluster locations,
+frequencies, shapes, and spread directly visible. The three colors play the
+role of semantic classes.
 '''),
         code(r'''
 clean, labels = sample_labeled_mixture(2400, device=device)
@@ -106,13 +196,13 @@ ax.legend(frameon=False)
 plt.show()
 '''),
         markdown(r'''
-## 2. Forward noising
+## 3. Forward noising
 
-We use the linear path
+First sample base noise, then use the linear path
 
-$$x_t = t\,x_{data} + (1-t)\,\epsilon.$$
+$$x_{noise}=s\epsilon,\qquad \epsilon\sim\mathcal N(0,I),$$
 
-Here `epsilon` is Gaussian with standard deviation `s=1.8` in each coordinate.
+$$x_t=(1-t)x_{noise}+t x_{data},\qquad s=1.8.$$
 
 - At `t=1`, the point is clean data.
 - At `t=0`, the point is Gaussian noise.
@@ -120,6 +210,18 @@ Here `epsilon` is Gaussian with standard deviation `s=1.8` in each coordinate.
 
 A diffusion model learns to undo a noising process. Flow matching learns the
 velocity of a path between the same endpoints.
+
+### Diffusion and flow matching in one table
+
+| Family | Typical learned quantity | Generation step |
+|---|---|---|
+| Diffusion model | noise, score, or a denoised estimate | repeatedly remove noise with a stochastic or deterministic sampler |
+| Flow-matching model | velocity along a chosen probability path | integrate an ODE from the source distribution to data |
+
+Both are time-dependent generative models. Here `t` indexes position along the
+noise-to-data path; it is not elapsed computer time. We use flow matching
+because the two-dimensional velocity arrows and complete trajectories are easy
+to draw, then connect the same ideas to diffusion denoisers and steering.
 '''),
         code(r'''
 set_seed(SEED)
@@ -138,7 +240,7 @@ plt.tight_layout()
 plt.show()
 '''),
         markdown(r'''
-## 3. What flow matching predicts
+## 4. What flow matching predicts
 
 Choose a noise point `x_noise`, a data point `x_data`, and a time `t`. Along the
 straight conditional path, the target velocity is simply
@@ -148,6 +250,8 @@ $$u_t = x_{data} - x_{noise}.$$
 Training repeatedly asks a neural network to predict this arrow from only
 `(x_t, t)`. Because many endpoint pairs can pass near the same `x_t`, the
 network learns an average velocity field, not a memorized arrow for each pair.
+The pair-specific target is available while constructing training examples but
+is not available during generation.
 '''),
         code(r'''
 set_seed(SEED + 1)
@@ -172,14 +276,20 @@ ax.legend(frameon=False)
 plt.show()
 '''),
         markdown(r'''
-## 4. Four objects that must not be confused
+## 5. Objects that must not be confused
 
-| Object | Job | Example in this series |
+| Object | Job | Learned? |
 |---|---|---|
-| Noising path | Defines intermediate training states | `x_t = t*x_data + (1-t)*noise` |
-| Neural model | Predicts a local quantity | velocity `v_theta(t, x_t)` |
-| Denoiser | Estimates clean data from a noisy state | `D_theta(x_t,t)` |
-| Sampler | Numerically follows model predictions | Euler, Heun, or RK4 |
+| Training dataset | Supplies examples of the distribution to imitate | No |
+| Base distribution | Supplies fresh, easy-to-sample Gaussian noise | No |
+| Noising path | Defines intermediate training states | Chosen by us |
+| Neural model | Predicts the local velocity `v_theta(t,x_t)` | Yes |
+| Denoiser view | Converts velocity into a clean-data estimate | Derived from the model |
+| Sampler | Numerically follows model predictions | Chosen by us |
+
+In these notes, **generator** refers to the complete sampling procedure: base
+distribution + trained neural model + sampler. Replacing Euler with RK4 changes
+the sampler, not the learned model.
 
 Notebook `01` trains the velocity model. Notebook `02` converts its velocity
 prediction into a denoised estimate and compares deterministic samplers.
@@ -202,8 +312,9 @@ distribution. The model never receives a class label.
 
 1. Implement independent conditional flow matching (I-CFM).
 2. Sample the learned ODE with a deterministic solver.
-3. Diagnose distribution quality with plots and metrics, not loss alone.
-4. Save one checkpoint used by the later steering notebooks.
+3. Explain sliced Wasserstein distance through one-dimensional projections.
+4. Diagnose distribution quality with plots and metrics, not loss alone.
+5. Save one checkpoint used by the later steering notebooks.
 '''),
         code(SETUP),
         markdown(r'''
@@ -224,7 +335,7 @@ optimal coupling between noise and data samples.
 # later notebook can also run independently.
 model, losses, trained_now = load_or_train_model(device=device)
 print("trained in this run:", trained_now)
-print("checkpoint:", CHECKPOINT_PATH)
+print("checkpoint:", CHECKPOINT_PATH.relative_to(NOTES_DIR))
 print("parameters:", sum(p.numel() for p in model.parameters()))
 '''),
         code(r'''
@@ -305,6 +416,82 @@ generation_checks = pd.DataFrame({
 })
 display(generation_checks)
 print("broad visual/metric sanity verdict:", "PASS" if generation_checks["passed"].all() else "CHECK OUTPUT")
+'''),
+        markdown(r'''
+### How sliced Wasserstein distance compares two clouds
+
+A class rate or a mean checks only one property. **Sliced Wasserstein distance
+(SWD)** compares the shapes of two complete point clouds:
+
+1. choose a direction and project both clouds onto that one-dimensional line;
+2. sort the projected values and compare corresponding positions;
+3. repeat for many directions and aggregate the squared gaps.
+
+The figure below illustrates the same computation used by `sliced_wasserstein`.
+Lower is better, and zero means that every illustrated projection agrees.
+SWD is still only one summary: mode coverage and within-mode spread remain
+useful separate checks.
+'''),
+        code(r'''
+# Use a small, fixed subset so every stage of the SWD calculation is visible.
+visual_count = 240
+visual_generated = generated[:visual_count]
+visual_target = target[:visual_count]
+slice_angles = torch.arange(12, device=device) * np.pi / 12
+slice_directions = torch.stack([torch.cos(slice_angles), torch.sin(slice_angles)], dim=1)
+generated_projections = torch.sort(visual_generated @ slice_directions.T, dim=0).values
+target_projections = torch.sort(visual_target @ slice_directions.T, dim=0).values
+projection_gaps = torch.sqrt(torch.mean((generated_projections - target_projections).square(), dim=0))
+illustrated_swd = torch.sqrt(torch.mean((generated_projections - target_projections).square()))
+selected_slice = 2
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
+
+axes[0].scatter(
+    visual_target[:, 0].cpu(), visual_target[:, 1].cpu(),
+    s=10, alpha=0.25, color="#D55E00", label="target",
+)
+axes[0].scatter(
+    visual_generated[:, 0].cpu(), visual_generated[:, 1].cpu(),
+    s=10, alpha=0.25, color="#0072B2", label="generated",
+)
+line_coordinate = torch.linspace(-5, 5, 100, device=device)
+slice_line = line_coordinate[:, None] * slice_directions[selected_slice]
+axes[0].plot(slice_line[:, 0].cpu(), slice_line[:, 1].cpu(), color="#222222", lw=2)
+axes[0].set(title="1. Project both clouds", aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.2, 4.5))
+axes[0].set_xticks([])
+axes[0].set_yticks([])
+axes[0].legend(frameon=False, loc="upper left")
+
+generated_1d = generated_projections[:, selected_slice].cpu()
+target_1d = target_projections[:, selected_slice].cpu()
+for index in range(0, visual_count, 5):
+    axes[1].plot(
+        [target_1d[index], generated_1d[index]], [0.25, 0.75],
+        color="#999999", alpha=0.28, lw=0.8,
+    )
+axes[1].scatter(target_1d, torch.full_like(target_1d, 0.25), s=9, alpha=0.38, color="#D55E00")
+axes[1].scatter(generated_1d, torch.full_like(generated_1d, 0.75), s=9, alpha=0.38, color="#0072B2")
+axes[1].set(
+    title="2. Sort and compare in 1D", xlabel="projected coordinate",
+    yticks=[0.25, 0.75], yticklabels=["target", "generated"], ylim=(0, 1),
+)
+axes[1].grid(alpha=0.18, axis="x")
+
+angle_degrees = slice_angles.cpu().numpy() * 180 / np.pi
+bar_colors = ["#D55E00" if index == selected_slice else "#777777" for index in range(len(slice_angles))]
+axes[2].bar(angle_degrees, projection_gaps.cpu(), width=11, color=bar_colors, alpha=0.85)
+axes[2].axhline(float(illustrated_swd.cpu()), color="#0072B2", ls="--", label="aggregate RMS")
+axes[2].set(
+    title="3. Repeat across directions", xlabel="projection angle (degrees)",
+    ylabel="1D sorted-position RMS",
+)
+axes[2].legend(frameon=False)
+axes[2].grid(alpha=0.18, axis="y")
+
+fig.suptitle(f"Sliced Wasserstein distance, illustrated value = {float(illustrated_swd.cpu()):.3f}", y=1.02)
+plt.tight_layout()
+plt.show()
 '''),
         code(r'''
 # A vector field is easier to understand when it is drawn.
@@ -579,7 +766,9 @@ If a model predicts the velocity `v_theta`, its clean-data estimate is
 $$D_\theta(x_t,t)=x_t+(1-t)v_\theta(x_t,t).$$
 
 This identity is specific to our linear path. It lets us inspect a denoiser even
-though the network was trained to output velocity.
+though the network was trained to output velocity. Here it is a clean-endpoint
+estimate inside a generative trajectory, not evidence that the model retrieves
+or reconstructs a particular training example.
 '''),
         code(r'''
 set_seed(SEED + 20)
@@ -616,6 +805,10 @@ plt.show()
 The model defines the arrows; the solver decides how to follow them. A fair
 solver comparison changes only the solver and step count. It keeps the model,
 initial noise tensor, and evaluation reference fixed.
+
+Deterministic is conditional on the initial state: repeating the same
+`x_noise` repeats the trajectory, while different initial noise points can
+still produce a diverse batch of endpoints.
 
 We use a 256-step RK4 trajectory as a numerical reference. This reference does
 not remove model error; it only makes solver error small.
@@ -1066,10 +1259,12 @@ gradient is computed at inference.
 
 **Learning goals**
 
-1. Measure when hidden activations become class-informative.
-2. Learn and visualize a class direction in feature space.
-3. Test whether one direction transfers across nearby timesteps.
-4. Compare baseline, noise alignment, gradient guidance, activation steering,
+1. Locate the hidden feature edit inside the velocity network.
+2. Separate class decodability, direction transfer across time, and causal
+   steering evidence.
+3. Learn and visualize a class direction in feature space.
+4. Test whether one fixed direction transfers across nearby timesteps.
+5. Compare baseline, noise alignment, gradient guidance, activation steering,
    and a two-stage combination under paired conditions.
 '''),
         code(SETUP),
@@ -1085,7 +1280,69 @@ checkpoint_digest_before = model_state_digest(model)
 print("frozen checkpoint digest:", checkpoint_digest_before[:16])
 '''),
         markdown(r'''
-## 1. When is class information visible in the hidden layer?
+## 1. Where activation steering acts
+
+The velocity MLP first converts the current state `(t, x_t)` into a hidden
+feature vector $h_t$. The intervention changes that feature before the final
+layers compute velocity:
+
+$$h'_t = h_t + \alpha\,g(t)\,\operatorname{RMS}(h_t)\,d_{0.90}.$$
+
+Here $d_{0.90}$ is a unit target-vs-rest direction learned from a labeled
+activation training split and checked on separate held-out activations,
+$\alpha$ controls strength, and $g(t)$ turns the edit on only in a chosen time
+window. The RMS factor puts the unit direction on the scale of the current
+layer.
+
+This does **not** pull the sample toward a point. It changes an internal feature,
+which may change the model's velocity; the ODE sampler then accumulates those
+velocity changes. Model weights stay frozen.
+'''),
+        code(r'''
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+def activation_box(ax, xy, width, text, color):
+    patch = FancyBboxPatch(
+        xy, width, 0.18,
+        boxstyle="round,pad=0.018,rounding_size=0.018",
+        facecolor=color, edgecolor="#333333", linewidth=1.1,
+    )
+    ax.add_patch(patch)
+    ax.text(xy[0] + width / 2, xy[1] + 0.09, text, ha="center", va="center", fontsize=9.5)
+
+def activation_arrow(ax, start, end, color="#333333"):
+    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=14, linewidth=1.35, color=color))
+
+fig, ax = plt.subplots(figsize=(12, 4.4))
+ax.set(xlim=(0, 1), ylim=(0, 1))
+ax.axis("off")
+
+ax.text(0.01, 0.80, "Ordinary forward pass", fontsize=11, weight="bold")
+activation_box(ax, (0.03, 0.56), 0.14, "state\n$(t,x_t)$", "#E7E6E6")
+activation_box(ax, (0.25, 0.56), 0.16, "hidden feature\n$h_t$", "#CFE2F3")
+activation_box(ax, (0.51, 0.56), 0.18, "later MLP\nlayers", "#D9EAD3")
+activation_box(ax, (0.79, 0.56), 0.17, "velocity\n$v_\\theta(t,x_t)$", "#EAD1DC")
+activation_arrow(ax, (0.17, 0.65), (0.25, 0.65))
+activation_arrow(ax, (0.41, 0.65), (0.51, 0.65))
+activation_arrow(ax, (0.69, 0.65), (0.79, 0.65))
+
+ax.text(0.01, 0.34, "Steered forward pass", fontsize=11, weight="bold")
+activation_box(ax, (0.03, 0.10), 0.14, "same state\n$(t,x_t)$", "#E7E6E6")
+activation_box(ax, (0.25, 0.10), 0.16, "same hidden\n$h_t$", "#CFE2F3")
+activation_box(ax, (0.48, 0.10), 0.24, "edited feature\n$h'_t=h_t+\\alpha g(t)\\,\\mathrm{RMS}(h_t)d_{0.90}$", "#FCE5CD")
+activation_box(ax, (0.79, 0.10), 0.17, "changed\nvelocity", "#EAD1DC")
+activation_arrow(ax, (0.17, 0.19), (0.25, 0.19))
+activation_arrow(ax, (0.41, 0.19), (0.48, 0.19))
+activation_arrow(ax, (0.72, 0.19), (0.79, 0.19))
+ax.text(0.60, 0.41, "learned direction $d_{0.90}$", ha="center", fontsize=9.5, color="#D55E00")
+activation_arrow(ax, (0.60, 0.39), (0.60, 0.29), color="#D55E00")
+
+fig.suptitle("Activation steering edits a hidden feature, not the sample position", fontsize=14, y=0.98)
+plt.tight_layout()
+plt.show()
+'''),
+        markdown(r'''
+## 2. When is class information visible in the hidden layer?
 
 For each time, we draw separate balanced training and test datasets, corrupt
 them with separate noise draws, and record one hidden layer. A ridge probe is
@@ -1095,6 +1352,8 @@ Their mean is usually near the one-in-three chance rate, but an individual
 shuffle can score higher by accidentally assigning output names to separable
 clusters. We therefore compare the true probe with the null's 95th percentile,
 not with the single largest shuffle. No probe is used to train the generator.
+A successful probe shows that class can be read from `h`; it does not show that
+editing `h` will control generation.
 '''),
         code(r'''
 def wilson_interval(successes, total, z=1.96):
@@ -1108,7 +1367,7 @@ probe_rows = []
 directions = {}
 probes = {}
 feature_sets = {}
-for time_index, t_value in enumerate([0.10, 0.25, 0.40, 0.55, 0.70, 0.85]):
+for time_index, t_value in enumerate([0.10, 0.25, 0.40, 0.55, 0.70, 0.85, 0.90]):
     set_seed(SEED + 500 + 2 * time_index)
     train_features, train_labels = collect_forward_activations(
         model, t_value=t_value, n_per_class=600
@@ -1183,7 +1442,7 @@ plt.show()
 '''),
         code(r'''
 # Fit display PCA only on training activations, then transform held-out activations.
-REFERENCE_T = 0.70
+REFERENCE_T = 0.90
 train_features, train_labels, test_features, test_labels = feature_sets[REFERENCE_T]
 pca_display = fit_pca_projection(train_features)
 projected_test = pca_display.transform(test_features)
@@ -1218,11 +1477,39 @@ plt.show()
 
 reference_direction = directions[REFERENCE_T]
 cosine_table = pd.DataFrame([
-    {"t": t_value, "cosine with t=0.70 direction": float(torch.dot(direction, reference_direction).cpu())}
+    {"t": t_value, f"cosine with t={REFERENCE_T:.2f} direction": float(torch.dot(direction, reference_direction).cpu())}
     for t_value, direction in directions.items()
 ])
 display(cosine_table.round(3))
 
+cosine_column = f"cosine with t={REFERENCE_T:.2f} direction"
+fig, ax = plt.subplots(figsize=(7.2, 3.9))
+ax.plot(cosine_table["t"], cosine_table[cosine_column], marker="o", lw=2, color="#0072B2")
+ax.axhline(0, color="#777777", lw=1, ls="--")
+ax.axvspan(0.40, 0.90, color="#E69F00", alpha=0.16, label="activation-only window")
+ax.scatter([REFERENCE_T], [1.0], s=90, color="#D55E00", zorder=3, label="$d_{0.90}$ reference")
+ax.set(
+    xlabel="t (noise to data)", ylabel="cosine similarity",
+    title="A late activation direction is not the local direction at every time",
+    xlim=(0.05, 0.95), ylim=(-0.35, 1.08),
+)
+ax.grid(alpha=0.2)
+ax.legend(frameon=False, loc="lower right")
+plt.show()
+'''),
+        markdown(r'''
+### Reading fixed-direction transfer
+
+We estimate $d_{0.90}$ at late time and reuse it as a fixed intervention vector
+over the calibrated window $[0.40, 0.90]$. Because time-specific directions are
+only weakly aligned with $d_{0.90}$ early in that window -- for example, cosine
+similarity is 0.177 at $t=0.40$ -- we do not interpret the intervention as
+following the local class direction at every time. The result shows that a
+late-time decodable direction can be causally useful as part of an
+endpoint-tuned control schedule; it does not show temporal invariance of the
+representation, RFM/AGOP, or full NA-RFM.
+'''),
+        code(r'''
 def direction_statistics(direction):
     scores = test_features @ direction
     positive = scores[test_labels == TARGET_CLASS]
@@ -1307,7 +1594,7 @@ print("held-out class-decodability supported:", label_direction_separated)
 print("PCA is display-only; the held-out probe and null tests are the decoding evidence.")
 '''),
         markdown(r'''
-## 2. Activation intervention
+## 3. Activation intervention
 
 The target direction is covariance-aware: it separates target examples from
 the remaining classes in hidden space. During an active time window, the model
@@ -1318,22 +1605,37 @@ This is a genuine hidden-feature intervention, not sample-space attraction. It
 is still simpler than NA-RFM: the paper uses RFM directions in image-model
 activation tensors, while this notebook uses a linear discriminant direction in
 one MLP layer.
+
+We collect the direction at `t = 0.90`, where the forward activations are close
+to clean data and strongly class-decodable. Collection time and intervention
+window are different choices: a small paired calibration on separate noise
+seeds selected the settings below by target SWD. The activation-only and
+two-stage methods are calibrated separately because early noise alignment
+changes the trajectories seen by the later activation edit.
 '''),
         code(r'''
 set_seed(SEED + 50)
 x0 = sample_base(1400, device=device)
 target_reference = sample_class(1400, TARGET_CLASS, device=device)
 
+ACTIVATION_STRENGTH = 7.0
+ACTIVATION_WINDOW = (0.40, 0.90)
+COMBINED_ACTIVATION_STRENGTH = 5.0
+COMBINED_ACTIVATION_WINDOW = (0.35, 0.85)
+
 methods = {
     "baseline": base_velocity(model),
     "activation 0.0": make_activation_steered_velocity(
-        model, reference_direction, strength=0.0, start=0.38, end=0.90
+        model, reference_direction, strength=0.0,
+        start=ACTIVATION_WINDOW[0], end=ACTIVATION_WINDOW[1],
     ),
     "shuffled activation": make_activation_steered_velocity(
-        model, shuffled_direction, strength=4.0, start=0.38, end=0.90
+        model, shuffled_direction, strength=ACTIVATION_STRENGTH,
+        start=ACTIVATION_WINDOW[0], end=ACTIVATION_WINDOW[1],
     ),
     "activation steering": make_activation_steered_velocity(
-        model, reference_direction, strength=4.0, start=0.38, end=0.90
+        model, reference_direction, strength=ACTIVATION_STRENGTH,
+        start=ACTIVATION_WINDOW[0], end=ACTIVATION_WINDOW[1],
     ),
     "noise alignment": make_noise_aligned_velocity(
         model, stats, target_class=TARGET_CLASS, strength=1.6
@@ -1343,7 +1645,9 @@ methods = {
     ),
     "noise + activation": make_combined_velocity(
         model, stats, reference_direction,
-        target_class=TARGET_CLASS, noise_strength=1.6, activation_strength=4.0,
+        target_class=TARGET_CLASS, noise_strength=1.6,
+        activation_strength=COMBINED_ACTIVATION_STRENGTH,
+        activation_window=COMBINED_ACTIVATION_WINDOW,
     ),
 }
 
@@ -1444,12 +1748,12 @@ if not label_specific_steering:
     print("claim downgrade: the generator is sensitive to activation perturbations, but label specificity is not established.")
 '''),
         markdown(r'''
-## 3. Further comparisons
+## 4. Further comparisons
 
 To explore sensitivity, vary one factor at a time while keeping the paired
 protocol fixed:
 
-1. **Collection time:** learn directions at `t = 0.40, 0.55, 0.70, 0.85`.
+1. **Collection time:** learn directions at `t = 0.40, 0.55, 0.70, 0.85, 0.90`.
 2. **Intervention window:** early, middle, or late with fixed direction/strength.
 3. **Activation strength:** at least three values with fixed direction/window.
 4. **Method:** baseline, noise alignment, gradient, activation, and combined.
@@ -1466,7 +1770,9 @@ the quality constraint used for comparison.
 - Conditional: the intervention is label-specific only when the true direction
   beats the matched shuffled-label direction in the paired sampling test.
 - Not supported: class lives in one unique direction, the feature is causally
-  necessary, or this linear discriminant is the RFM component of full NA-RFM.
+  necessary, `d_0.90` equals the local target direction at every intervention
+  time, hidden representations are temporally invariant, or this linear
+  discriminant is the RFM component of full NA-RFM.
 
 ## Paper bridge
 

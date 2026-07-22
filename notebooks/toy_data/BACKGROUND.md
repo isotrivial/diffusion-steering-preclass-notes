@@ -3,7 +3,45 @@
 This file supplies the minimum derivations needed by the notebooks. The main
 pre-class notes stay visual; these details explain why the formulas are valid.
 
-## 1. Linear I-CFM path
+## 1. What a generative model learns
+
+We observe a finite training dataset sampled from an unknown data distribution.
+A generative model learns a procedure whose new outputs resemble that
+distribution. It is not a lookup table and it does not need to reconstruct one
+particular training example during generation.
+
+Generative sampling and reconstruction answer different questions. Sampling
+draws fresh base noise and produces a new data-like output with no paired clean
+answer. Reconstruction starts from an observation tied to one particular item
+and estimates that same item. A generative model may still compute a denoised
+estimate internally during sampling; that does not turn sampling into retrieval
+or reconstruction.
+
+For a deterministic flow model, the complete sampling procedure is
+
+```text
+fresh base noise -> trained velocity model + ODE sampler -> generated sample.
+```
+
+The base distribution is deliberately simple, usually Gaussian. Different
+initial noise seeds provide different starting points and therefore different
+outputs. "Deterministic sampler" means that one fixed seed follows one fixed
+trajectory when the model and numerical settings are unchanged; it does not
+mean all seeds produce the same sample.
+
+An unconditional model receives no requested class or prompt. A conditional
+model receives such information as an input. The model in these notes is
+unconditional: labels are absent from its training input and are used later
+only to construct post-hoc controls and evaluate their effects.
+
+Diffusion and flow matching both learn time-dependent structure between noise
+and data. Diffusion models commonly predict noise, a score, or a denoised
+estimate and may use stochastic or deterministic sampling. Flow matching learns
+a velocity field and integrates an ODE. In these notes, the velocity network is
+the learned neural component; the source distribution and ODE solver complete
+the generator.
+
+## 2. Linear I-CFM path
 
 Sample independent endpoints, using base standard deviation `s = 1.8` in these
 notebooks:
@@ -29,7 +67,7 @@ The neural model minimizes mean-squared error between `v_theta(t,x_t)` and this
 target. The target for one sampled pair is constant, while the learned population
 field depends on both location and time because many sampled paths overlap.
 
-## 2. Velocity-to-denoiser conversion
+## 3. Velocity-to-denoiser conversion
 
 Rearrange the path:
 
@@ -46,7 +84,7 @@ D_theta(x_t,t) = x_t + (1-t) v_theta(t,x_t).
 This is a clean-data estimate for the linear parameterization. It does not mean
 the MLP was trained with a separate diffusion-denoising loss.
 
-## 3. Deterministic ODE sampling
+## 4. Deterministic ODE sampling
 
 Generation solves
 
@@ -61,7 +99,7 @@ fixed, the rollout contains no further random draw.
 This is why paired initial noise is a strong experimental control: two methods
 start from the same individual samples, not merely from the same distribution.
 
-## 4. Additive-noise coordinates
+## 5. Additive-noise coordinates
 
 For `t > 0`, divide the linear path by `t` and substitute
 `x_noise = s * epsilon`:
@@ -76,7 +114,7 @@ coordinates. Small `t` corresponds to large `sigma_eff` and high noise. Keeping
 the factor `s` is necessary because the base distribution used here is not unit
 variance.
 
-## 5. Gaussian/PCA denoiser
+## 6. Gaussian/PCA denoiser
 
 Assume clean data are Gaussian with mean `mu` and covariance `C`, and observe
 
@@ -103,7 +141,7 @@ Delta D = D_target_class - D_full_data.
 It is computed from labeled examples offline and applied only at high noise.
 This is distinct from reusing the same initial noise tensor for evaluation.
 
-## 6. Gradient guidance
+## 7. Gradient guidance
 
 Suppose `s_c(x)` is a differentiable score for target class `c`. The gradient
 
@@ -119,7 +157,7 @@ evaluation.
 This is post-hoc because the generator is frozen, but it is not cheap or
 gradient-free at inference.
 
-## 7. Why hidden-feature steering can work
+## 8. Why hidden-feature steering can work
 
 The MLP computes
 
@@ -131,13 +169,26 @@ If target and background examples separate in `h`, a target-vs-rest direction
 can change the downstream velocity in a class-relevant way. Repeated local
 velocity changes accumulate over an ODE trajectory.
 
+The notebook intervention is
+
+```text
+h_steered = h + alpha * g(t) * RMS(h) * d_reference,
+```
+
+where `d_reference` is a unit direction learned from activations, `alpha` is a
+strength, and `g(t)` is a time-window gate. This edits a hidden feature, not the
+sample position. The downstream layers decide how that edit changes velocity.
+A successful linear probe shows that class information is readable from `h`;
+it does not by itself show that moving along the probe-related direction will
+control generation.
+
 The notebooks check three empirical requirements instead of assuming them:
 
 1. a linear probe can decode class from the feature;
-2. learned directions remain aligned across nearby times;
+2. direction alignment is measured rather than assumed across time;
 3. injection improves control without unacceptable fidelity or diversity loss.
 
-## 8. Reading the eight-Gaussian flow map
+## 9. Reading the eight-Gaussian flow map
 
 The eight-Gaussian example stores a deterministic trajectory for every sampled
 base point. Only after sampling, each endpoint is assigned to its nearest data
@@ -151,7 +202,20 @@ mean nearest-component distance checks within-component spread, while sliced
 Wasserstein distance compares the full generated and target point sets. No one
 metric establishes distributional equality.
 
-## 9. Scope boundary
+For each two-dimensional unit direction `d`, SWD projects both clouds onto a
+line, sorts the projected values, and compares corresponding sorted positions.
+With `K` directions and `n` points, the implementation uses
+
+```text
+SWD = sqrt(mean over k,i of (sort(x @ d_k)[i] - sort(y @ d_k)[i])^2).
+```
+
+Repeating across directions makes the comparison sensitive to more than the
+mean of the cloud. Lower is better. A small SWD is useful evidence of broad
+distributional agreement, but separate mode-coverage and spread checks can
+still reveal failures hidden by one scalar summary.
+
+## 10. Scope boundary
 
 The toy model is not a U-Net, image diffusion model, or implementation of the
 full NA-RFM pipeline. It does implement the following mechanisms in a setting

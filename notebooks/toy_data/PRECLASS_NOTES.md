@@ -7,6 +7,13 @@ limited background in differential equations, diffusion models, or
 representation learning. They are intended to establish shared vocabulary and
 visual intuition before class discussion.
 
+No prior generative-model taxonomy is assumed. Notebook `00` introduces the
+minimum vocabulary visually before using path equations.
+
+The root `README.md` links to output-bearing snapshots for readers who do not
+want to run training first. The notebooks in this directory remain clean,
+output-free source files.
+
 The notebooks use one unconditional flow-matching MLP. Class labels never enter
 its training input. Labels appear later only for evaluation and for constructing
 post-hoc steering signals.
@@ -27,13 +34,28 @@ Readers should be comfortable with:
 Gaussian distributions, covariance, PCA, numerical integration, classifiers,
 and hidden representations are introduced visually as they are needed.
 
+### Generative-model vocabulary used throughout
+
+The training dataset supplies examples of an unknown distribution. A base
+Gaussian supplies easy-to-sample random starting points. The neural model learns
+a local prediction, and a sampler turns those predictions into a complete
+trajectory. In this series, the full generator is therefore
+
+```text
+base distribution + trained velocity model + ODE sampler.
+```
+
+Training uses data examples to fit the velocity model. Generation starts from
+fresh noise and does not receive a paired clean answer. Different noise seeds
+provide diversity even when the ODE sampler is deterministic.
+
 ## Suggested Reading Order
 
 ### 00: Diffusion and flow-matching foundations
 
-Visualize clean classes at several noise levels, inspect straight
-source-to-data paths, and distinguish four objects: noising path, neural model,
-denoiser, and sampler.
+Distinguish generation from classification and reconstruction, compare
+unconditional, conditional, and post-hoc control, visualize clean classes at
+several noise levels, and inspect straight source-to-data paths.
 
 ### 01: Unconditional flow-matching training
 
@@ -72,6 +94,11 @@ direction.
 
 | Phrase | Meaning in these notes |
 |---|---|
+| generative model | A learned procedure for producing new samples that resemble a data distribution |
+| generative sampling | Transform fresh base noise into a new data-like sample without a paired known clean answer |
+| reconstruction | Estimate the clean version of one particular observed or corrupted item |
+| unconditional generator | A generator that receives no requested class or prompt |
+| base distribution | The easy Gaussian source used to start generation |
 | I-CFM | Independent source/data coupling with a linear conditional path |
 | deterministic sampler | The trajectory is fixed once model, solver, settings, and initial noise are fixed |
 | paired initial noise | Reusing the exact initial tensor to isolate method effects |
@@ -103,14 +130,22 @@ The eight-Gaussian flow map additionally reports mode coverage, component
 occupancy error, within-component spread, and SWD. These are broad sanity checks,
 not a claim that the learned and target densities are exactly equal.
 
+SWD projects both sample clouds onto many one-dimensional directions, sorts the
+projected positions, compares them, and aggregates the discrepancies. Lower is
+better. The visual construction appears in notebook `01`; it should be read
+together with mode coverage and diversity rather than as a complete quality
+certificate.
+
 ## Questions for Class
 
-1. Why is a denoised estimate useful when the trained network predicts velocity?
-2. Why does deterministic sampling make paired initial noise informative?
-3. Why is Gaussian/PCA guidance concentrated at high noise?
-4. Why can gradient guidance be more expensive than forward-only guidance?
-5. At what times do hidden features become class-informative?
-6. Which conclusions from the 2D examples require new evidence before applying
+1. Which components together form the complete generator in these notes?
+2. Why can a deterministic sampler produce diverse outputs from different noise seeds?
+3. Why is a denoised estimate useful when the trained network predicts velocity?
+4. Why does deterministic sampling make paired initial noise informative?
+5. Why is Gaussian/PCA guidance concentrated at high noise?
+6. Why can gradient guidance be more expensive than forward-only guidance?
+7. At what times do hidden features become class-informative?
+8. Which conclusions from the 2D examples require new evidence before applying
    them to image diffusion models?
 
 ## Optional image bridge
