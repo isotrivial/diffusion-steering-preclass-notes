@@ -76,16 +76,11 @@ NOTEBOOKS = {
         markdown(r'''
 # 00 - From noise to data: diffusion and flow-matching foundations
 
-This notebook builds the visual vocabulary used by the remaining notes. The
-audience is expected to know Python and vectors, but not stochastic calculus.
-
-**Learning goals**
-
-1. Explain what a generative model learns and distinguish sampling from reconstruction.
-2. Recognize a forward noising path and a reverse generative path.
-3. Read a time-dependent vector field as arrows that move points.
-4. Explain the flow-matching training pair `(x_t, x_data - x_noise)`.
-5. Distinguish a model, a denoiser, and a numerical sampler.
+How can a model turn unstructured noise into varied, data-like samples? We
+start in two dimensions because every distribution, arrow, and trajectory can
+be drawn. That visible setting will make the later image and steering examples
+less mysterious. Python and vectors are enough background; no stochastic
+calculus is assumed.
 
 The toy dataset has three labeled clusters, but the generative model in later
 notebooks will be trained **without labels**. Labels are retained only to test
@@ -97,9 +92,8 @@ post-hoc steering.
 
 A generative model learns a **sampling procedure**. It is given a finite set of
 training examples and learns how to create new samples with similar
-distribution-level structure. This differs from a classifier, which receives a
-sample and predicts a label, and from reconstruction, which estimates the clean
-version of one particular observed item.
+distribution-level structure. It does not simply return a stored training
+example.
 
 For the flow model in these notes:
 
@@ -109,8 +103,7 @@ For the flow model in these notes:
 
 The neural network alone is therefore not the complete generator. The source
 distribution, trained velocity model, and sampler work together. During
-generation there is no paired clean target to reconstruct: each fresh noise
-seed starts a new sample.
+generation, each fresh noise seed starts a new sample.
 '''),
         code(r'''
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
@@ -127,7 +120,7 @@ def process_box(ax, xy, width, height, text, color):
 def process_arrow(ax, start, end):
     ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=15, linewidth=1.4, color="#333333"))
 
-fig, axes = plt.subplots(3, 1, figsize=(11.5, 8.0))
+fig, axes = plt.subplots(2, 1, figsize=(11.5, 5.6))
 for ax in axes:
     ax.set(xlim=(0, 1), ylim=(0, 1))
     ax.axis("off")
@@ -151,15 +144,7 @@ process_arrow(axes[1], (0.63, 0.48), (0.78, 0.48))
 axes[1].text(0.02, 0.12, "Different seeds provide diversity.", fontsize=9, color="#555555")
 axes[1].text(0.66, 0.12, "Same seed + same settings = same endpoint.", fontsize=9, color="#555555")
 
-axes[2].set_title("Reconstruction (contrast): estimate one particular observed item", loc="left", fontsize=12)
-process_box(axes[2], (0.02, 0.34), 0.24, 0.28, "corrupted observation\nof one item", "#E7E6E6")
-process_box(axes[2], (0.39, 0.34), 0.22, 0.28, "reconstruction\nprocedure", "#D9EAD3")
-process_box(axes[2], (0.76, 0.34), 0.20, 0.28, "estimate of\nthat same item", "#FCE5CD")
-process_arrow(axes[2], (0.26, 0.48), (0.39, 0.48))
-process_arrow(axes[2], (0.61, 0.48), (0.76, 0.48))
-axes[2].text(0.02, 0.12, "This is not the generation task used in this series.", fontsize=9, color="#555555")
-
-fig.suptitle("Training, generative sampling, and reconstruction", fontsize=14, y=1.01)
+fig.suptitle("How a flow model learns and generates", fontsize=14, y=1.01)
 plt.tight_layout()
 plt.show()
 '''),
@@ -179,7 +164,7 @@ diverse collection: it maps different initial noise seeds to different
 endpoints.
 '''),
         markdown(r'''
-## 2. A dataset we can see
+## 2. Why begin with a dataset we can see?
 
 A probability distribution describes which regions are likely and how often
 different kinds of samples occur. Images live in thousands or millions of
@@ -276,7 +261,11 @@ ax.legend(frameon=False)
 plt.show()
 '''),
         markdown(r'''
-## 5. Objects that must not be confused
+## 5. Why keep the model and sampler separate?
+
+Later we will change the numerical solver and add steering terms. Those changes
+are easier to reason about if we know which part was learned and which part was
+chosen at sampling time.
 
 | Object | Job | Learned? |
 |---|---|---|
@@ -305,20 +294,19 @@ prediction into a denoised estimate and compares deterministic samplers.
         markdown(r'''
 # 01 - Train an unconditional flow-matching model
 
-We now train a small MLP to transport Gaussian noise into the three-cluster data
-distribution. The model never receives a class label.
-
-**Learning goals**
-
-1. Implement independent conditional flow matching (I-CFM).
-2. Sample the learned ODE with a deterministic solver.
-3. Explain sliced Wasserstein distance through one-dimensional projections.
-4. Diagnose distribution quality with plots and metrics, not loss alone.
-5. Save one checkpoint used by the later steering notebooks.
+The equations in notebook `00` become useful only if a learned field actually
+moves an entire source distribution into a target distribution. We therefore
+train a small MLP ourselves, inspect what it gets right and wrong, and then test
+the same recipe on three visibly different geometries. The model never receives
+a class label.
 '''),
         code(SETUP),
         markdown(r'''
-## 1. The complete training objective
+## 1. Why train the model ourselves?
+
+A pretrained checkpoint would hide the connection between sampled endpoint
+pairs and the velocity loss. This small example lets us see the complete
+training rule before using larger pretrained image models.
 
 For each minibatch:
 
@@ -351,7 +339,7 @@ ax.grid(alpha=0.2)
 plt.show()
 '''),
         markdown(r'''
-## 2. Generate samples by solving an ODE
+## 2. How does a fitted field become samples?
 
 Once an initial noise batch is fixed, the ODE sampler is deterministic:
 
@@ -390,13 +378,13 @@ generated_balance /= generated_balance.sum()
 
 diagnostics = pd.DataFrame({
     "diagnostic": [
-        "sliced Wasserstein to full target",
+        "Wasserstein distance to full target",
         "generated class balance max error",
         "smallest generated mode fraction",
         "all samples finite",
     ],
     "value": [
-        sliced_wasserstein(generated, target),
+        wasserstein_distance(generated, target),
         float(torch.max(torch.abs(generated_balance - 1 / len(CLASS_NAMES))).cpu()),
         float(generated_balance.min().cpu()),
         bool(torch.isfinite(generated).all()),
@@ -418,78 +406,59 @@ display(generation_checks)
 print("broad visual/metric sanity verdict:", "PASS" if generation_checks["passed"].all() else "CHECK OUTPUT")
 '''),
         markdown(r'''
-### How sliced Wasserstein distance compares two clouds
+### Why use Wasserstein distance in addition to a plot?
 
-A class rate or a mean checks only one property. **Sliced Wasserstein distance
-(SWD)** compares the shapes of two complete point clouds:
+A class rate or a mean checks only one property. Wasserstein distance asks for
+the cheapest way to match generated points to target points, where moving a
+point farther costs more. The code uses equal-size deterministic subsets and
+reports the mean matched distance. It is a finite-sample estimate, not the
+unknown population distance.
 
-1. choose a direction and project both clouds onto that one-dimensional line;
-2. sort the projected values and compare corresponding positions;
-3. repeat for many directions and aggregate the squared gaps.
-
-The figure below illustrates the same computation used by `sliced_wasserstein`.
-Lower is better, and zero means that every illustrated projection agrees.
-SWD is still only one summary: mode coverage and within-mode spread remain
-useful separate checks.
+The lines below make the definition literal. Lower is better. We still inspect
+mode coverage and spread because one scalar cannot diagnose every failure.
 '''),
         code(r'''
-# Use a small, fixed subset so every stage of the SWD calculation is visible.
-visual_count = 240
-visual_generated = generated[:visual_count]
-visual_target = target[:visual_count]
-slice_angles = torch.arange(12, device=device) * np.pi / 12
-slice_directions = torch.stack([torch.cos(slice_angles), torch.sin(slice_angles)], dim=1)
-generated_projections = torch.sort(visual_generated @ slice_directions.T, dim=0).values
-target_projections = torch.sort(visual_target @ slice_directions.T, dim=0).values
-projection_gaps = torch.sqrt(torch.mean((generated_projections - target_projections).square(), dim=0))
-illustrated_swd = torch.sqrt(torch.mean((generated_projections - target_projections).square()))
-selected_slice = 2
+from scipy.optimize import linear_sum_assignment
+
+visual_count = 120
+visual_indexes = torch.linspace(0, generated.shape[0] - 1, visual_count).round().long().to(device)
+target_indexes = torch.linspace(0, target.shape[0] - 1, visual_count).round().long().to(device)
+visual_generated = generated[visual_indexes]
+visual_target = target[target_indexes]
+matching_costs = torch.cdist(visual_generated, visual_target).cpu().numpy()
+generated_rows, target_columns = linear_sum_assignment(matching_costs)
+matched_distances = matching_costs[generated_rows, target_columns]
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
-
 axes[0].scatter(
     visual_target[:, 0].cpu(), visual_target[:, 1].cpu(),
-    s=10, alpha=0.25, color="#D55E00", label="target",
+    s=16, alpha=0.45, color="#D55E00", label="target",
 )
 axes[0].scatter(
     visual_generated[:, 0].cpu(), visual_generated[:, 1].cpu(),
-    s=10, alpha=0.25, color="#0072B2", label="generated",
+    s=16, alpha=0.45, color="#0072B2", label="generated",
 )
-line_coordinate = torch.linspace(-5, 5, 100, device=device)
-slice_line = line_coordinate[:, None] * slice_directions[selected_slice]
-axes[0].plot(slice_line[:, 0].cpu(), slice_line[:, 1].cpu(), color="#222222", lw=2)
-axes[0].set(title="1. Project both clouds", aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.2, 4.5))
+axes[0].set(title="1. Two empirical distributions", aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.2, 4.5))
 axes[0].set_xticks([])
 axes[0].set_yticks([])
 axes[0].legend(frameon=False, loc="upper left")
 
-generated_1d = generated_projections[:, selected_slice].cpu()
-target_1d = target_projections[:, selected_slice].cpu()
-for index in range(0, visual_count, 5):
-    axes[1].plot(
-        [target_1d[index], generated_1d[index]], [0.25, 0.75],
-        color="#999999", alpha=0.28, lw=0.8,
-    )
-axes[1].scatter(target_1d, torch.full_like(target_1d, 0.25), s=9, alpha=0.38, color="#D55E00")
-axes[1].scatter(generated_1d, torch.full_like(generated_1d, 0.75), s=9, alpha=0.38, color="#0072B2")
-axes[1].set(
-    title="2. Sort and compare in 1D", xlabel="projected coordinate",
-    yticks=[0.25, 0.75], yticklabels=["target", "generated"], ylim=(0, 1),
-)
-axes[1].grid(alpha=0.18, axis="x")
+for row, column in zip(generated_rows, target_columns):
+    endpoints = torch.stack([visual_generated[row], visual_target[column]]).cpu()
+    axes[1].plot(endpoints[:, 0], endpoints[:, 1], color="#999999", alpha=0.22, lw=0.7)
+axes[1].scatter(visual_target[:, 0].cpu(), visual_target[:, 1].cpu(), s=13, alpha=0.55, color="#D55E00")
+axes[1].scatter(visual_generated[:, 0].cpu(), visual_generated[:, 1].cpu(), s=13, alpha=0.55, color="#0072B2")
+axes[1].set(title="2. Minimum-cost one-to-one matching", aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.2, 4.5))
+axes[1].set_xticks([])
+axes[1].set_yticks([])
 
-angle_degrees = slice_angles.cpu().numpy() * 180 / np.pi
-bar_colors = ["#D55E00" if index == selected_slice else "#777777" for index in range(len(slice_angles))]
-axes[2].bar(angle_degrees, projection_gaps.cpu(), width=11, color=bar_colors, alpha=0.85)
-axes[2].axhline(float(illustrated_swd.cpu()), color="#0072B2", ls="--", label="aggregate RMS")
-axes[2].set(
-    title="3. Repeat across directions", xlabel="projection angle (degrees)",
-    ylabel="1D sorted-position RMS",
-)
+axes[2].hist(matched_distances, bins=18, color="#0072B2", alpha=0.82)
+axes[2].axvline(matched_distances.mean(), color="#D55E00", lw=2, label="mean matched distance")
+axes[2].set(title="3. Distances in the optimal matching", xlabel="matched Euclidean distance", ylabel="number of pairs")
 axes[2].legend(frameon=False)
 axes[2].grid(alpha=0.18, axis="y")
 
-fig.suptitle(f"Sliced Wasserstein distance, illustrated value = {float(illustrated_swd.cpu()):.3f}", y=1.02)
+fig.suptitle(f"Empirical Wasserstein distance = {matched_distances.mean():.3f}", y=1.02)
 plt.tight_layout()
 plt.show()
 '''),
@@ -516,12 +485,133 @@ plt.tight_layout()
 plt.show()
 '''),
         markdown(r'''
-## 3. A learned flow map to eight Gaussian modes
+## 3. Does the method learn a curved distribution?
+
+Three Gaussian clusters could leave the impression that flow matching only
+learns a few destination centers. A noisy circle is a stricter visual test: it
+has continuously many valid endpoints and a thin curved support. We train a
+separate unconditional model and ask whether it forms the ring without leaving
+large angular gaps.
+'''),
+        code(r'''
+main_checkpoint_digest_before = file_sha256(CHECKPOINT_PATH)
+circle_train_started = time.perf_counter()
+circle_model, circle_losses, circle_trained_now = load_or_train_circle_model(device=device)
+circle_train_seconds = time.perf_counter() - circle_train_started
+assert file_sha256(CHECKPOINT_PATH) == main_checkpoint_digest_before
+
+circle_payload = torch.load(CIRCLE_CHECKPOINT_PATH, map_location="cpu", weights_only=False)
+set_seed(SEED + 71)
+circle_x0 = sample_base(4096, device=device)
+circle_target, _ = sample_noisy_circle(4096, device=device)
+circle_sample_started = time.perf_counter()
+circle_path = integrate_ode(base_velocity(circle_model), circle_x0, steps=80, method="heun")
+circle_sample_seconds = time.perf_counter() - circle_sample_started
+circle_generated = circle_path[-1].to(device)
+
+target_angles = torch.remainder(torch.atan2(circle_target[:, 1], circle_target[:, 0]), 2 * np.pi)
+generated_angles = torch.remainder(torch.atan2(circle_generated[:, 1], circle_generated[:, 0]), 2 * np.pi)
+
+fig, axes = plt.subplots(1, 4, figsize=(16, 3.8))
+axes[0].scatter(circle_x0[:, 0].cpu(), circle_x0[:, 1].cpu(), s=5, alpha=0.20, color="#777777")
+axes[0].set_title("Gaussian source")
+axes[1].scatter(circle_target[:, 0].cpu(), circle_target[:, 1].cpu(), c=target_angles.cpu(), cmap="twilight", s=5, alpha=0.35)
+axes[1].set_title("Noisy-circle target")
+axes[2].scatter(circle_generated[:, 0].cpu(), circle_generated[:, 1].cpu(), c=generated_angles.cpu(), cmap="twilight", s=5, alpha=0.35)
+axes[2].set_title("Generated endpoints")
+axes[3].plot(circle_losses, color="#0072B2", alpha=0.45, lw=0.8)
+if len(circle_losses) >= 100:
+    circle_smooth = np.convolve(circle_losses, np.ones(100) / 100, mode="valid")
+    axes[3].plot(np.arange(99, len(circle_losses)), circle_smooth, color="#D55E00", lw=2)
+axes[3].set(title="Circle training loss", xlabel="optimization step", ylabel="MSE")
+axes[3].grid(alpha=0.2)
+for ax in axes[:3]:
+    ax.set(aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.5, 4.5))
+    ax.set_xticks([])
+    ax.set_yticks([])
+plt.tight_layout()
+plt.show()
+print(f"circle load/train seconds: {circle_train_seconds:.2f}")
+print(f"circle sampling seconds: {circle_sample_seconds:.2f}")
+'''),
+        code(r'''
+snapshot_steps = [0, 20, 40, 60, 80]
+circle_plot_indexes = torch.linspace(0, circle_path.shape[1] - 1, 1800).round().long()
+circle_final_colors = generated_angles[circle_plot_indexes.to(device)].cpu()
+
+fig, axes = plt.subplots(1, len(snapshot_steps), figsize=(16, 3.4))
+for ax, step_index in zip(axes, snapshot_steps):
+    points = circle_path[step_index][circle_plot_indexes]
+    ax.scatter(points[:, 0], points[:, 1], c=circle_final_colors, cmap="twilight", s=5, alpha=0.38)
+    if step_index == 80:
+        reference = circle_target[:900].cpu()
+        ax.scatter(reference[:, 0], reference[:, 1], s=7, facecolors="none", edgecolors="#444444", alpha=0.15, linewidths=0.4)
+    ax.set_title(f"t={step_index / 80:.2f}")
+    ax.set(aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.5, 4.5))
+    ax.set_xticks([])
+    ax.set_yticks([])
+fig.suptitle("A deterministic flow forms a continuous ring; color follows final angle", y=1.02)
+plt.tight_layout()
+plt.show()
+'''),
+        code(r'''
+circle_target_radii = torch.linalg.norm(circle_target, dim=1)
+circle_generated_radii = torch.linalg.norm(circle_generated, dim=1)
+circle_radial_mae = float(torch.mean(torch.abs(circle_generated_radii - CIRCLE_RADIUS)).cpu())
+
+angular_bins = 16
+target_bins = torch.floor(angular_bins * target_angles / (2 * np.pi)).long().clamp_max(angular_bins - 1)
+generated_bins = torch.floor(angular_bins * generated_angles / (2 * np.pi)).long().clamp_max(angular_bins - 1)
+target_occupancy = torch.bincount(target_bins, minlength=angular_bins).float()
+target_occupancy /= target_occupancy.sum()
+generated_occupancy = torch.bincount(generated_bins, minlength=angular_bins).float()
+generated_occupancy /= generated_occupancy.sum()
+circle_angular_tv = float((0.5 * torch.abs(generated_occupancy - target_occupancy).sum()).cpu())
+
+circle_source_wasserstein = wasserstein_distance(circle_x0, circle_target)
+circle_generated_wasserstein = wasserstein_distance(circle_generated, circle_target)
+circle_wasserstein_ratio = circle_generated_wasserstein / circle_source_wasserstein
+
+circle_diagnostics = pd.DataFrame({
+    "diagnostic": [
+        "target mean radius", "generated mean radius", "generated radial MAE",
+        "angular occupancy total variation", "source-to-target Wasserstein distance",
+        "generated-to-target Wasserstein distance", "generated/source distance ratio",
+    ],
+    "value": [
+        float(circle_target_radii.mean().cpu()), float(circle_generated_radii.mean().cpu()),
+        circle_radial_mae, circle_angular_tv, circle_source_wasserstein,
+        circle_generated_wasserstein, circle_wasserstein_ratio,
+    ],
+})
+display(circle_diagnostics.round(4))
+
+circle_checks = pd.DataFrame({
+    "check": [
+        "all endpoints finite", "radial MAE at most 0.35",
+        "angular occupancy TV at most 0.15", "Wasserstein distance less than 55% of source",
+        "checkpoint metadata matches requested geometry",
+    ],
+    "passed": [
+        bool(torch.isfinite(circle_generated).all()),
+        circle_radial_mae <= 0.35,
+        circle_angular_tv <= 0.15,
+        circle_wasserstein_ratio <= 0.55,
+        circle_payload["training_steps"] == int(os.environ.get("TOY_NOTES_CIRCLE_STEPS", "3000"))
+        and circle_payload["radius"] == CIRCLE_RADIUS,
+    ],
+})
+display(circle_checks)
+print("circle geometry verdict:", "PASS" if circle_checks["passed"].all() else "CHECK OUTPUT")
+'''),
+        markdown(r'''
+## 4. Why also inspect eight separated modes?
 
 The three-class model is kept for the steering notebooks because its labels are
-easy to discuss. To make the transport map itself more visible, we train a
-second unconditional model on eight narrow Gaussian components arranged on a
-ring. This is still learned I-CFM: no destination center is used by the sampler.
+easy to discuss, while the circle tests continuous curved geometry. Eight narrow
+components expose a different failure mode: a model can omit destinations or
+assign them the wrong amount of probability. This is still learned I-CFM; no
+destination center is used by the sampler.
 
 We color each particle by the component nearest to its **final** endpoint, then
 trace the same particle backward through stored time slices. The colors are for
@@ -634,9 +724,9 @@ target_fractions = target_counts / target_counts.sum()
 
 uniform_fractions = torch.full_like(generated_fractions, 1 / 8)
 occupancy_tv = float((0.5 * torch.abs(generated_fractions - uniform_fractions).sum()).cpu())
-base_swd = sliced_wasserstein(ring_x0, ring_target)
-ring_swd = sliced_wasserstein(ring_generated, ring_target)
-ring_swd_ratio = ring_swd / base_swd
+source_wasserstein = wasserstein_distance(ring_x0, ring_target)
+ring_wasserstein = wasserstein_distance(ring_generated, ring_target)
+ring_wasserstein_ratio = ring_wasserstein / source_wasserstein
 covered_modes = int((generated_fractions >= 0.05).sum().cpu())
 
 mode_rows = []
@@ -662,9 +752,9 @@ ring_diagnostics = pd.DataFrame({
     "diagnostic": [
         "modes with at least 5% generated mass",
         "occupancy total variation from uniform",
-        "source-to-target SWD",
-        "generated-to-target SWD",
-        "generated/source SWD ratio",
+        "source-to-target Wasserstein distance",
+        "generated-to-target Wasserstein distance",
+        "generated/source Wasserstein distance ratio",
         "mean normalized centroid error",
         "median within-mode trace ratio",
         "all endpoints finite",
@@ -672,9 +762,9 @@ ring_diagnostics = pd.DataFrame({
     "value": [
         covered_modes,
         occupancy_tv,
-        base_swd,
-        ring_swd,
-        ring_swd_ratio,
+        source_wasserstein,
+        ring_wasserstein,
+        ring_wasserstein_ratio,
         mode_table["normalized centroid error"].mean(),
         mode_table["within-mode trace ratio"].median(),
         bool(torch.isfinite(ring_generated).all()),
@@ -689,7 +779,7 @@ ring_checks = pd.DataFrame({
         "all samples finite",
         "all eight mode shares at least 0.05",
         "occupancy total variation at most 0.15",
-        "generated SWD at most half source SWD",
+        "generated Wasserstein distance at most half source Wasserstein distance",
         "mean normalized centroid error at most 1.5",
         "median trace ratio in [0.5, 2.5]",
         "every trace ratio at least 0.25",
@@ -699,7 +789,7 @@ ring_checks = pd.DataFrame({
         bool(torch.isfinite(ring_generated).all()),
         covered_modes == 8,
         occupancy_tv <= 0.15,
-        ring_swd_ratio <= 0.50,
+        ring_wasserstein_ratio <= 0.50,
         mode_table["normalized centroid error"].mean() <= 1.5,
         0.5 <= mode_table["within-mode trace ratio"].median() <= 2.5,
         mode_table["within-mode trace ratio"].min() >= 0.25,
@@ -713,20 +803,20 @@ print("eight-mode map release verdict:", "PASS" if ring_checks["passed"].all() e
         markdown(r'''
 The snapshot figure shows **where the learned ODE sends regions of the initial
 Gaussian**, while the diagnostics check mode coverage and occupancy. Passing
-these broad checks does not prove that every local density is exact; the SWD and
-within-component spread still matter.
+these broad checks does not prove that every local density is exact; the
+Wasserstein distance and within-component spread still matter.
 '''),
         markdown(r'''
-## Checkpoint
+## What these examples establish
 
-Before continuing, verify that:
+The loss curve alone is not enough. The three-cluster sample checks familiar
+multimodal structure, the circle checks continuous curved geometry, and the
+eight-Gaussian map makes missing modes visible. Together they give us a trained
+unconditional model and a reason to inspect sampling and steering with more
+than one metric.
 
-- the loss is finite and decreases;
-- generated points cover all three modes;
-- the endpoint plot resembles the target distribution;
-- the eight-mode map passes broad coverage and occupancy checks;
-- both `artifacts/toy_flow_model.pt` and
-  `artifacts/eight_gaussian_flow_model.pt` exist.
+The three cached models live in `artifacts/toy_flow_model.pt`,
+`artifacts/circle_flow_model.pt`, and `artifacts/eight_gaussian_flow_model.pt`.
 
 **Questions**
 
@@ -739,15 +829,11 @@ Before continuing, verify that:
         markdown(r'''
 # 02 - Denoisers and deterministic samplers
 
-This notebook connects three views of the same linear flow: velocity prediction,
-clean-data prediction, and numerical ODE integration.
-
-**Learning goals**
-
-1. Convert a velocity prediction into a denoised estimate.
-2. Visualize what the model believes the final clean sample will be over time.
-3. Compare Euler, Heun, and RK4 under a fixed model and fixed initial noise.
-4. Explain why paired initial noise is essential for deterministic comparisons.
+Our network predicts velocity, while diffusion papers and the CIFAR experiment
+often describe a denoised or clean-image estimate. Steering will be much easier
+to understand once we can translate between those two languages. We then ask a
+separate practical question: how accurately must a numerical solver follow the
+learned field?
 '''),
         code(SETUP),
         code(r'''
@@ -755,20 +841,88 @@ model, losses, trained_now = load_or_train_model(device=device)
 print("trained in this run:", trained_now)
 '''),
         markdown(r'''
-## 1. Velocity and denoiser are two parameterizations
+## 1. Why can a velocity prediction be read as a denoiser?
 
-Along the linear conditional path,
+Start with one exact training pair. Along the linear conditional path,
 
 $$x_t=x_{noise}+t(x_{data}-x_{noise}).$$
 
-If a model predicts the velocity `v_theta`, its clean-data estimate is
+Its pair-specific velocity is $u=x_{data}-x_{noise}$. Rearranging the path gives
+
+$$x_{data}=x_t+(1-t)u.$$
+
+This first identity is exact because the two endpoints are known while we build
+a training example. During generation the network sees only $(x_t,t)$, not
+those endpoints. Mean-squared-error training therefore learns the conditional
+average
+
+$$v^*(x_t,t)=\mathbb E[u\mid x_t,t].$$
+
+Substituting that average into the exact identity gives
+
+$$D^*(x_t,t)=x_t+(1-t)v^*(x_t,t)
+=\mathbb E[x_{data}\mid x_t,t].$$
+
+For the trained network we use the same conversion:
 
 $$D_\theta(x_t,t)=x_t+(1-t)v_\theta(x_t,t).$$
 
-This identity is specific to our linear path. It lets us inspect a denoiser even
-though the network was trained to output velocity. Here it is a clean-endpoint
-estimate inside a generative trajectory, not evidence that the model retrieves
-or reconstructs a particular training example.
+The result is the best mean-squared-error clean estimate under the training
+pair distribution. It is an average over plausible clean endpoints, not a
+guarantee that the model has identified one hidden original. When several modes
+are plausible, the average can sit between them; in images, such averaging can
+look blurry.
+
+Away from $t=1$, the conversion can also be inverted as
+$v_\theta=(D_\theta-x_t)/(1-t)$. Near $t=1$ that division is poorly conditioned,
+so code should not use it exactly at the endpoint. This dependence on the
+chosen linear path is important: a different path has different conversion
+factors.
+'''),
+        code(r'''
+set_seed(SEED + 19)
+visual_clean, visual_labels = sample_labeled_mixture(180, device=device)
+visual_noise = sample_base(180, device=device)
+visual_t_value = 0.35
+visual_t = torch.full((180,), visual_t_value, device=device)
+visual_xt = forward_noising(visual_clean, visual_t, visual_noise)
+pair_velocity = visual_clean - visual_noise
+with torch.no_grad():
+    learned_velocity = model(visual_t, visual_xt)
+    clean_estimate = denoised_from_velocity(visual_xt, visual_t, learned_velocity)
+
+subset = torch.arange(0, 180, 6, device=device)
+fig, axes = plt.subplots(1, 3, figsize=(15, 4.4))
+for ax in axes:
+    ax.scatter(visual_xt[:, 0].cpu(), visual_xt[:, 1].cpu(), s=8, alpha=0.16, color="#777777")
+    ax.set(aspect="equal", xlim=(-5, 5), ylim=(-5, 5))
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+axes[0].quiver(
+    visual_xt[subset, 0].cpu(), visual_xt[subset, 1].cpu(),
+    pair_velocity[subset, 0].cpu(), pair_velocity[subset, 1].cpu(),
+    angles="xy", scale_units="xy", scale=3.0, width=0.004, color="#D55E00",
+)
+axes[0].set_title("Training target: endpoint pair is known")
+
+axes[1].quiver(
+    visual_xt[subset, 0].cpu(), visual_xt[subset, 1].cpu(),
+    learned_velocity[subset, 0].cpu(), learned_velocity[subset, 1].cpu(),
+    angles="xy", scale_units="xy", scale=3.0, width=0.004, color="#0072B2",
+)
+axes[1].set_title("Learned velocity: only (t, x_t) is known")
+
+for index in subset:
+    estimate_line = torch.stack([visual_xt[index], clean_estimate[index]]).cpu()
+    axes[2].plot(estimate_line[:, 0], estimate_line[:, 1], color="#999999", alpha=0.45, lw=0.8)
+axes[2].scatter(clean_estimate[:, 0].cpu(), clean_estimate[:, 1].cpu(), s=10, alpha=0.35, color="#0072B2", label="D_theta")
+axes[2].scatter(visual_clean[:, 0].cpu(), visual_clean[:, 1].cpu(), s=14, alpha=0.25, facecolors="none", edgecolors="#D55E00", label="paired clean endpoint")
+axes[2].set_title("D_theta = current state + remaining velocity")
+axes[2].legend(frameon=False, fontsize=8, loc="upper left")
+fig.suptitle(f"The velocity-to-denoiser conversion at t={visual_t_value:.2f}", y=1.02)
+plt.tight_layout()
+plt.show()
 '''),
         code(r'''
 set_seed(SEED + 20)
@@ -832,7 +986,7 @@ for method in ["euler", "heun", "rk4"]:
             "steps": steps,
             "model evaluations": steps * {"euler": 1, "heun": 2, "rk4": 4}[method],
             "paired endpoint RMSE": paired_rmse,
-            "SWD to target": sliced_wasserstein(path[-1], target.cpu()),
+            "Wasserstein distance to target": wasserstein_distance(path[-1], target.cpu()),
             "seconds": seconds,
         })
         if (method, steps) in {("euler", 8), ("heun", 16), ("rk4", 16)}:
@@ -880,20 +1034,16 @@ evaluation.
         markdown(r'''
 # 03 - Class steering with Gaussian/PCA denoisers
 
-We now add the first post-hoc class control. There is no hand-written attraction
-toward a coordinate. The guidance signal is the difference
-between two denoisers estimated from labeled examples:
+At high noise, a generator cannot yet know fine sample details, but means and
+major directions of variation can still provide useful structure. This
+notebook first tests that idea on MNIST pixels, then uses the difference between
+a target-class and full-data denoiser as a coarse post-hoc steering signal:
 
 $$\Delta D = D_{target\ class} - D_{full\ data}.$$
 
-This is the 2D counterpart of the high-noise noise-alignment stage in NA-RFM.
-
-**Learning goals**
-
-1. Understand a Gaussian denoiser as a noise-dependent shrinkage rule.
-2. Visualize class-conditional versus unconditional denoising.
-3. Apply their difference only in the high-noise sampling window.
-4. Evaluate class control, target fidelity, diversity, and cost separately.
+There is no hand-written anchor or attraction toward a coordinate. The final
+2D experiment is the visible counterpart of the high-noise noise-alignment
+stage in NA-RFM.
 '''),
         code(SETUP),
         code(r'''
@@ -924,14 +1074,151 @@ $\epsilon\sim\mathcal{N}(0,I)$ and `s=1.8`, then divide the path by `t`:
 $$\frac{x_t}{t}=x_{data}+s\frac{1-t}{t}\epsilon.$$
 
 The right side is clean data plus Gaussian noise with effective noise level
-`sigma_eff=s(1-t)/t`. For a Gaussian data model, the posterior mean has a closed
-form. The factor `s` matters because our base distribution is not unit variance.
+`sigma_eff=s(1-t)/t`. For a Gaussian data model, the posterior mean is
+
+$$D(y,\sigma)=\mu+C(C+\sigma^2I)^{-1}(y-\mu).$$
+
+If $C=U\Lambda U^\top$, each principal-component coordinate is multiplied by
+$\lambda_i/(\lambda_i+\sigma^2)$. Large-variance directions survive; uncertain
+small-variance directions shrink toward the mean. This is why PCA is a useful
+way to compute the same rule for images.
+
+The factor `s` matters because our base distribution is not unit variance.
 At high noise the denoiser trusts coarse mean/covariance statistics; at low noise
 it stays close to the observed point.
 
 The full-data Gaussian is deliberately crude because the complete dataset is a
 mixture. That limitation is useful: subtracting the full denoiser from the
 target-class denoiser isolates a coarse class correction.
+
+[Li, Dai, and Qu (NeurIPS 2024)](https://arxiv.org/abs/2410.24060) report that
+diffusion denoisers become increasingly linear in a generalization regime and
+that their best linear approximations are close to empirical Gaussian
+denoisers. Their study includes FFHQ and checks on CIFAR-10, AFHQ, and
+LSUN-Churches. The MNIST calculation below is our teaching demonstration, not
+an experiment from that paper. We do not present it as ImageNet evidence; the
+later CIFAR-10 notebook supplies the image-generator experiment in this series.
+'''),
+        markdown(r'''
+## 2. Does a covariance model retain useful image structure?
+
+MNIST makes all 784 pixel coordinates visible without needing a large network.
+We fit low-rank Gaussian models on the training split only: one to all digits
+and one to digit 3. The leading covariance directions are `eigendigits`.
+On held-out test images, we add known Gaussian noise and compare the noisy input
+with both posterior-mean denoisers.
+'''),
+        code(r'''
+MNIST_TARGET = 3
+MNIST_RANK = 64
+MNIST_SIGMA = 0.45
+
+mnist_train_images, mnist_train_labels = load_mnist_split(train=True, device=device)
+mnist_test_images, mnist_test_labels = load_mnist_split(train=False, device=device)
+
+full_fit_indexes = torch.linspace(
+    0, mnist_train_images.shape[0] - 1, 12000, device=device
+).round().long()
+class_fit_pool = torch.where(mnist_train_labels == MNIST_TARGET)[0]
+class_fit_indexes = class_fit_pool[: min(6000, class_fit_pool.numel())]
+
+set_seed(SEED + 330)
+mnist_full_gaussian = fit_low_rank_gaussian(
+    mnist_train_images[full_fit_indexes], rank=MNIST_RANK
+)
+set_seed(SEED + 331)
+mnist_class_gaussian = fit_low_rank_gaussian(
+    mnist_train_images[class_fit_indexes], rank=MNIST_RANK
+)
+
+print("MNIST training images used for full Gaussian:", full_fit_indexes.numel())
+print("MNIST digit-3 training images used:", class_fit_indexes.numel())
+print("PCA rank:", MNIST_RANK)
+'''),
+        code(r'''
+fig, axes = plt.subplots(2, 6, figsize=(10, 3.8))
+axes[0, 0].imshow(mnist_full_gaussian.mean.reshape(28, 28).cpu(), cmap="gray", vmin=0, vmax=1)
+axes[0, 0].set_title("all-digit mean")
+axes[1, 0].imshow(mnist_class_gaussian.mean.reshape(28, 28).cpu(), cmap="gray", vmin=0, vmax=1)
+axes[1, 0].set_title("digit-3 mean")
+for column in range(1, 6):
+    for row, stats, label in [
+        (0, mnist_full_gaussian, "all"),
+        (1, mnist_class_gaussian, "digit 3"),
+    ]:
+        component = stats.components[:, column - 1].reshape(28, 28).cpu()
+        scale = float(component.abs().max().clamp_min(1e-8))
+        axes[row, column].imshow(component, cmap="RdBu_r", vmin=-scale, vmax=scale)
+        axes[row, column].set_title(f"{label} PC {column}")
+for ax in axes.flat:
+    ax.axis("off")
+fig.suptitle("Means and leading covariance directions learned from MNIST training images", y=1.02)
+plt.tight_layout()
+plt.show()
+'''),
+        code(r'''
+held_out_pool = torch.where(mnist_test_labels == MNIST_TARGET)[0]
+held_out_indexes = held_out_pool[:256]
+mnist_clean = mnist_test_images[held_out_indexes]
+set_seed(SEED + 332)
+mnist_noisy = mnist_clean + MNIST_SIGMA * torch.randn_like(mnist_clean)
+mnist_full_denoised = low_rank_gaussian_denoise(
+    mnist_noisy, MNIST_SIGMA, mnist_full_gaussian
+)
+mnist_class_denoised = low_rank_gaussian_denoise(
+    mnist_noisy, MNIST_SIGMA, mnist_class_gaussian
+)
+
+def image_mse(images):
+    return float(torch.mean((images - mnist_clean).square()).cpu())
+
+mnist_mse = {
+    "noisy input": image_mse(mnist_noisy),
+    "all-digit Gaussian": image_mse(mnist_full_denoised),
+    "digit-3 Gaussian": image_mse(mnist_class_denoised),
+}
+mnist_metrics = pd.DataFrame({
+    "method": list(mnist_mse),
+    "held-out MSE": list(mnist_mse.values()),
+    "PSNR (dB)": [10 * np.log10(1.0 / value) for value in mnist_mse.values()],
+})
+display(mnist_metrics.round(4))
+
+display_count = 10
+fig, axes = plt.subplots(4, display_count, figsize=(13, 5.4))
+rows = [
+    ("clean test image", mnist_clean),
+    (f"noisy, sigma={MNIST_SIGMA}", mnist_noisy),
+    ("all-digit Gaussian", mnist_full_denoised),
+    ("digit-3 Gaussian", mnist_class_denoised),
+]
+for row, (label, images) in enumerate(rows):
+    for column in range(display_count):
+        axes[row, column].imshow(images[column].reshape(28, 28).detach().cpu().clamp(0, 1), cmap="gray", vmin=0, vmax=1)
+        axes[row, column].axis("off")
+    axes[row, 0].set_ylabel(label, rotation=0, ha="right", va="center", labelpad=34)
+fig.suptitle("Gaussian/PCA posterior means on held-out digit-3 images", y=1.01)
+plt.tight_layout()
+plt.show()
+
+mnist_checks = pd.DataFrame({
+    "check": ["all-digit Gaussian beats noisy input", "digit-3 Gaussian beats noisy input"],
+    "passed": [
+        mnist_mse["all-digit Gaussian"] < mnist_mse["noisy input"],
+        mnist_mse["digit-3 Gaussian"] < mnist_mse["noisy input"],
+    ],
+})
+display(mnist_checks)
+print("MNIST Gaussian denoising verdict:", "PASS" if mnist_checks["passed"].all() else "CHECK OUTPUT")
+'''),
+        markdown(r'''
+## 3. How does denoising become a steering signal?
+
+The image example shows what one Gaussian posterior mean preserves and loses.
+For steering, we compare two such estimates at the same noisy state. Their
+difference asks for class-level structure that the target model favors more
+than the full-data model. The gate below limits that correction to the
+high-noise part of the trajectory.
 '''),
         code(r'''
 grid_1d = torch.linspace(-4.5, 4.5, 19, device=device)
@@ -960,7 +1247,7 @@ plt.tight_layout()
 plt.show()
 '''),
         markdown(r'''
-## 2. Paired class-steering experiment
+## 4. Does the correction improve paired samples?
 
 All methods below use the same initial noise, Heun solver, step count, and target
 reference. The only change is the noise-alignment strength. The correction is
@@ -1039,7 +1326,7 @@ sweep = noise_alignment_table.dropna(subset=["strength"]).sort_values("strength"
 fig, axes = plt.subplots(1, 4, figsize=(15, 3.6))
 metric_specs = [
     ("target_rate", "target-class rate (higher)", None),
-    ("target_swd", "SWD to target (lower)", None),
+    ("target_wasserstein", "Wasserstein distance to target (lower)", None),
     ("mean_error", "target mean error (lower)", None),
     ("diversity_ratio", "diversity ratio", 1.0),
 ]
@@ -1058,28 +1345,28 @@ baseline_row = noise_alignment_table.set_index("method").loc["baseline"]
 aligned_row = noise_alignment_table.set_index("method").loc["noise alignment 1.6"]
 
 control_gain = aligned_row["target_rate"] - baseline_row["target_rate"]
-swd_reduction = baseline_row["target_swd"] - aligned_row["target_swd"]
+wasserstein_reduction = baseline_row["target_wasserstein"] - aligned_row["target_wasserstein"]
 mean_error_reduction = baseline_row["mean_error"] - aligned_row["mean_error"]
 
 alignment_evidence = pd.DataFrame({
     "question": [
         "zero strength reproduces baseline",
         "target-class rate improves by at least 0.15",
-        "SWD to target decreases by at least 0.20",
+        "Wasserstein distance to target decreases by at least 0.20",
         "mean error decreases by at least 0.20",
         "resembles full class-conditional sampling",
     ],
     "observed": [
         zero_strength_error,
         control_gain,
-        swd_reduction,
+        wasserstein_reduction,
         mean_error_reduction,
         aligned_row["target_rate"],
     ],
     "supported": [
         zero_strength_error < 1e-6,
         control_gain >= 0.15,
-        swd_reduction >= 0.20,
+        wasserstein_reduction >= 0.20,
         mean_error_reduction >= 0.20,
         aligned_row["target_rate"] >= 0.90 and 0.5 <= aligned_row["diversity_ratio"] <= 2.0,
     ],
@@ -1091,7 +1378,7 @@ full_conditional = bool(alignment_evidence.loc[4, "supported"])
 print("partial coarse steering supported:", partial_success)
 print("full class-conditional generation supported:", full_conditional)
 if partial_success:
-    print("WHAT WORKED: target rate increased while target SWD and mean error both decreased.")
+    print("WHAT WORKED: target rate increased while target Wasserstein distance and mean error both decreased.")
 if not full_conditional:
     print("WHAT DID NOT HAPPEN: off-target mass and excessive spread remain; this is not full class conditioning.")
 print("WHAT THE METHOD IS NOT: no point was selected and no point-attraction controller was used.")
@@ -1100,7 +1387,7 @@ print("WHAT THE METHOD IS NOT: no point was selected and no point-attraction con
 ## Interpretation guardrails
 
 - Higher target-class rate measures control, not sample quality.
-- Lower SWD measures agreement with target examples.
+- Lower Wasserstein distance measures agreement with target examples.
 - A diversity ratio far below one indicates collapse; far above one indicates
   excessive spread.
 - The model remains unconditional and unchanged. Only small class/full summary
@@ -1108,14 +1395,14 @@ print("WHAT THE METHOD IS NOT: no point was selected and no point-attraction con
 - In high-dimensional image experiments, PCA gives a low-rank covariance model.
   In 2D we keep both principal directions, so the computation is a full Gaussian
   denoiser.
-- The intended result is **partial coarse steering**: target rate, SWD, and mean
+- The intended result is **partial coarse steering**: target rate, Wasserstein distance, and mean
   error should improve together. A high remaining diversity ratio or many
   off-target endpoints rules out a claim of full class-conditional generation.
 
 **Questions**
 
 1. Why should this coarse correction be most useful at high noise?
-2. Which strength best balances target rate and target SWD in your run?
+2. Which strength best balances target rate and target Wasserstein distance in your run?
 3. What information is lost when a multimodal full dataset is approximated by one Gaussian?
 '''),
     ],
@@ -1123,18 +1410,14 @@ print("WHAT THE METHOD IS NOT: no point was selected and no point-attraction con
         markdown(r'''
 # 04 - Post-hoc gradient guidance
 
-This notebook implements a standard alternative to retraining a conditional
-generator: differentiate a target-class objective during sampling.
+The Gaussian correction in notebook `03` is cheap but limited to information
+captured by means and covariances. If a differentiable objective describes the
+desired class or constraint more directly, its gradient offers a more flexible
+local steering direction. This notebook tests that alternative without
+retraining the generator.
 
 Here **post-hoc** means that the flow model is frozen. It does not mean the
 sampler is free: every active solver evaluation requires a backward pass.
-
-**Learning goals**
-
-1. Read a classifier log probability as an energy landscape.
-2. Use its gradient as the local direction of fastest class-probability increase.
-3. Compare gradient guidance with forward-only Gaussian/PCA guidance.
-4. Report control, fidelity, diversity, and runtime together.
 '''),
         code(SETUP),
         code(r'''
@@ -1144,7 +1427,7 @@ stats = estimate_gaussian_stats(reference_data, reference_labels)
 TARGET_CLASS = 2
 '''),
         markdown(r'''
-## 1. A clean-data class energy
+## 1. Why does an objective gradient provide a direction?
 
 The three class Gaussians define `p(class | x)` in clean data space. During
 sampling we first compute the model's denoised estimate `D_theta(x_t,t)`, then
@@ -1224,7 +1507,7 @@ plt.show()
 
 relative = gradient_table.copy()
 relative["runtime / baseline"] = relative["seconds"] / relative.loc[0, "seconds"]
-display(relative[["method", "target_rate", "target_swd", "diversity_ratio", "runtime / baseline"]].round(3))
+display(relative[["method", "target_rate", "target_wasserstein", "diversity_ratio", "runtime / baseline"]].round(3))
 '''),
         markdown(r'''
 ## Cost model
@@ -1242,7 +1525,7 @@ depends on hardware, but the computational distinction is structural:
 **Questions**
 
 1. Why can a gradient become unreliable at very high noise?
-2. Does the largest target rate also give the best target SWD and diversity?
+2. Does the largest target rate also give the best target Wasserstein distance and diversity?
 3. Which comparison isolates the price of inference-time backpropagation?
 '''),
     ],
@@ -1250,22 +1533,14 @@ depends on hardware, but the computational distinction is structural:
         markdown(r'''
 # 05 - Hidden-feature steering and method comparison
 
-This note moves the intervention from 2D sample space into a hidden
-layer of the unconditional velocity network.
+Gradient guidance is flexible, but its backward passes can be expensive. A
+different possibility is that the frozen generator already stores useful class
+information in an internal representation. We first test whether that
+information is genuinely readable, then ask whether editing it changes samples.
 
 We collect hidden features from labeled examples after forward noising, learn a
 target-vs-rest direction offline, and add that direction during sampling. No
 gradient is computed at inference.
-
-**Learning goals**
-
-1. Locate the hidden feature edit inside the velocity network.
-2. Separate class decodability, direction transfer across time, and causal
-   steering evidence.
-3. Learn and visualize a class direction in feature space.
-4. Test whether one fixed direction transfers across nearby timesteps.
-5. Compare baseline, noise alignment, gradient guidance, activation steering,
-   and a two-stage combination under paired conditions.
 '''),
         code(SETUP),
         code(r'''
@@ -1280,7 +1555,7 @@ checkpoint_digest_before = model_state_digest(model)
 print("frozen checkpoint digest:", checkpoint_digest_before[:16])
 '''),
         markdown(r'''
-## 1. Where activation steering acts
+## 1. Why intervene inside the network?
 
 The velocity MLP first converts the current state `(t, x_t)` into a hidden
 feature vector $h_t$. The intervention changes that feature before the final
@@ -1609,7 +1884,7 @@ one MLP layer.
 We collect the direction at `t = 0.90`, where the forward activations are close
 to clean data and strongly class-decodable. Collection time and intervention
 window are different choices: a small paired calibration on separate noise
-seeds selected the settings below by target SWD. The activation-only and
+seeds selected the settings below by target Wasserstein distance. The activation-only and
 two-stage methods are calibrated separately because early noise alignment
 changes the trajectories seen by the later activation edit.
 '''),
@@ -1705,12 +1980,12 @@ label_offsets = {
 }
 tradeoff_table = comparison_table[comparison_table["method"] != "activation 0.0"]
 for _, row in tradeoff_table.iterrows():
-    ax.scatter(row["target_swd"], row["target_rate"], s=80, marker=marker_by_method[row["method"]])
+    ax.scatter(row["target_wasserstein"], row["target_rate"], s=80, marker=marker_by_method[row["method"]])
     ax.annotate(
-        row["method"], (row["target_swd"], row["target_rate"]),
+        row["method"], (row["target_wasserstein"], row["target_rate"]),
         xytext=label_offsets[row["method"]], textcoords="offset points", fontsize=9,
     )
-ax.set(xlabel="SWD to target class (lower is better)", ylabel="target-class rate (higher is better)", title="Control-quality trade-off")
+ax.set(xlabel="Wasserstein distance to target class (lower is better)", ylabel="target-class rate (higher is better)", title="Control-quality trade-off")
 ax.grid(alpha=0.2)
 plt.show()
 '''),
@@ -1719,28 +1994,28 @@ method_rows = comparison_table.set_index("method")
 activation_gain = method_rows.loc["activation steering", "target_rate"] - method_rows.loc["baseline", "target_rate"]
 shuffled_gain = method_rows.loc["shuffled activation", "target_rate"] - method_rows.loc["baseline", "target_rate"]
 label_specific_margin = activation_gain - shuffled_gain
-activation_swd_reduction = method_rows.loc["baseline", "target_swd"] - method_rows.loc["activation steering", "target_swd"]
+activation_wasserstein_reduction = method_rows.loc["baseline", "target_wasserstein"] - method_rows.loc["activation steering", "target_wasserstein"]
 best_control_method = comparison_table.loc[comparison_table["target_rate"].idxmax(), "method"]
-best_target_match_method = comparison_table.loc[comparison_table["target_swd"].idxmin(), "method"]
+best_target_match_method = comparison_table.loc[comparison_table["target_wasserstein"].idxmin(), "method"]
 
 intervention_evidence = pd.DataFrame({
     "check": [
         "activation-only target-rate gain at least 0.10",
-        "activation-only SWD decreases",
+        "activation-only Wasserstein distance decreases",
         "true direction beats shuffled-direction gain by at least 0.05",
         "combined method has strongest target control",
     ],
-    "observed": [activation_gain, activation_swd_reduction, label_specific_margin, best_control_method],
+    "observed": [activation_gain, activation_wasserstein_reduction, label_specific_margin, best_control_method],
     "supported": [
         activation_gain >= 0.10,
-        activation_swd_reduction > 0,
+        activation_wasserstein_reduction > 0,
         label_specific_margin >= 0.05 and label_direction_separated,
         best_control_method == "noise + activation",
     ],
 })
 display(intervention_evidence.round(4))
 print("strongest target control:", best_control_method)
-print("lowest SWD to target examples:", best_target_match_method)
+print("lowest Wasserstein distance to target examples:", best_target_match_method)
 print("activation-only paired improvement supported:", bool(intervention_evidence.loc[:1, "supported"].all()))
 label_specific_steering = bool(intervention_evidence.loc[2, "supported"])
 print("label-specific activation steering supported:", label_specific_steering)
@@ -1759,7 +2034,7 @@ protocol fixed:
 4. **Method:** baseline, noise alignment, gradient, activation, and combined.
 5. **Robustness:** repeat the decisive comparison over three initial-noise seeds.
 
-The useful quantities to compare are target-class rate, target SWD, diversity
+The useful quantities to compare are target-class rate, target Wasserstein distance, diversity
 ratio, runtime, and paired trajectories. A method is not "best" without stating
 the quality constraint used for comparison.
 

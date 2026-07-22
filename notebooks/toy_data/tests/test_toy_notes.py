@@ -11,6 +11,8 @@ sys.path.insert(0, str(NOTES_DIR))
 
 from toy_notes import (  # noqa: E402
     BASE_STD,
+    CIRCLE_RADIUS,
+    CIRCLE_RADIAL_STD,
     EIGHT_GAUSSIAN_CENTERS,
     EIGHT_GAUSSIAN_STD,
     VelocityMLP,
@@ -19,17 +21,20 @@ from toy_notes import (  # noqa: E402
     denoised_from_velocity,
     discriminant_direction,
     estimate_gaussian_stats,
+    fit_low_rank_gaussian,
     fit_pca_projection,
     fit_linear_probe,
     forward_noising,
     gaussian_denoise,
     integrate_ode,
+    low_rank_gaussian_denoise,
     make_activation_steered_velocity,
     make_noise_aligned_velocity,
     model_state_digest,
     sample_labeled_mixture,
     sample_eight_gaussians,
-    sliced_wasserstein,
+    sample_noisy_circle,
+    wasserstein_distance,
     window_gate,
 )
 
@@ -72,12 +77,22 @@ def test_deterministic_integrator_repeats_exactly():
     assert torch.equal(first, second)
 
 
-def test_sliced_wasserstein_detects_a_shift():
+def test_wasserstein_distance_detects_a_shift():
     torch.manual_seed(15)
     samples = torch.randn(256, 2)
-    assert sliced_wasserstein(samples, samples.clone()) == 0.0
+    assert wasserstein_distance(samples, samples.clone()) < 1e-4
     shifted = samples + torch.tensor([1.0, 0.0])
-    assert sliced_wasserstein(samples, shifted) > 0.5
+    assert wasserstein_distance(samples, shifted) > 0.5
+
+
+def test_circle_sampler_has_expected_radius_and_angular_coverage():
+    torch.manual_seed(16)
+    points, labels = sample_noisy_circle(4096, device=torch.device("cpu"))
+    radii = torch.linalg.norm(points, dim=1)
+    fractions = torch.bincount(labels, minlength=8).float() / labels.numel()
+    assert abs(float(radii.mean()) - CIRCLE_RADIUS) < 0.03
+    assert abs(float(radii.std()) - CIRCLE_RADIAL_STD) < 0.03
+    assert torch.max(torch.abs(fractions - 1 / 8)) < 0.03
 
 
 def test_velocity_to_denoiser_identity_for_exact_pair():
@@ -108,6 +123,18 @@ def test_gaussian_denoiser_approaches_observation_at_low_noise():
     covariance = torch.tensor([[1.5, 0.2], [0.2, 0.8]])
     denoised = gaussian_denoise(y, torch.full((32,), 1e-4), mean, covariance)
     assert torch.allclose(denoised, y, atol=1e-5)
+
+
+def test_low_rank_gaussian_denoiser_reduces_noise_on_low_rank_data():
+    torch.manual_seed(17)
+    basis, _ = torch.linalg.qr(torch.randn(20, 3))
+    train = torch.randn(1000, 3) @ basis.T
+    clean = torch.randn(200, 3) @ basis.T
+    sigma = 0.5
+    noisy = clean + sigma * torch.randn_like(clean)
+    stats = fit_low_rank_gaussian(train, rank=3)
+    denoised = low_rank_gaussian_denoise(noisy, sigma, stats)
+    assert torch.mean((denoised - clean).square()) < torch.mean((noisy - clean).square())
 
 
 def test_window_gate_is_zero_outside_window():

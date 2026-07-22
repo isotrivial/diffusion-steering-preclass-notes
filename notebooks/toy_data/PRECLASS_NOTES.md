@@ -2,10 +2,10 @@
 
 ## Purpose
 
-These six notebooks are preparatory notes for undergraduates who may have
-limited background in differential equations, diffusion models, or
-representation learning. They are intended to establish shared vocabulary and
-visual intuition before class discussion.
+These six notebooks and the accompanying CIFAR-10 experiment are preparatory
+notes for undergraduates who may have limited background in differential
+equations, diffusion models, or representation learning. They build visual
+intuition before class discussion.
 
 No prior generative-model taxonomy is assumed. Notebook `00` introduces the
 minimum vocabulary visually before using path equations.
@@ -18,9 +18,9 @@ The notebooks use one unconditional flow-matching MLP. Class labels never enter
 its training input. Labels appear later only for evaluation and for constructing
 post-hoc steering signals.
 
-Notebook `01` also trains a separate unlabeled eight-Gaussian model solely to
-make the learned flow map easy to see. That illustration model is not used by
-the steering notebooks.
+Notebook `01` also trains separate unlabeled circle and eight-Gaussian models
+to make continuous geometry and multimodal flow maps easy to see. Those
+illustration models are not used by the steering notebooks.
 
 ## Useful Background
 
@@ -53,42 +53,45 @@ provide diversity even when the ODE sampler is deterministic.
 
 ### 00: Diffusion and flow-matching foundations
 
-Distinguish generation from classification and reconstruction, compare
-unconditional, conditional, and post-hoc control, visualize clean classes at
-several noise levels, and inspect straight source-to-data paths.
+We first need a concrete picture of what turns noise into a sample. This note
+separates the source distribution, learned velocity field, and numerical
+sampler, then draws forward noising and source-to-data paths.
 
 ### 01: Unconditional flow-matching training
 
-Train I-CFM on an unlabeled three-component mixture, integrate the learned ODE,
-and inspect generated samples and the time-dependent vector field. A second
-unconditional model on eight Gaussian modes shows the learned deterministic
-flow map at several times and checks mode coverage and occupancy.
+Training one small model exposes the connection between the flow-matching loss
+and generated samples. A three-component mixture checks familiar modes, a noisy
+circle tests curved continuous support, and eight Gaussians reveal missing-mode
+and occupancy failures.
 
 ### 02: Denoisers and deterministic samplers
 
-Derive `D_theta(x_t,t) = x_t + (1-t)v_theta(x_t,t)` and compare Euler, Heun,
-and RK4 from exactly the same initial noise tensor.
+The next methods are written in denoiser language even though our network
+predicts velocity. This note derives the conditional-expectation meaning of
+`D_theta(x_t,t) = x_t + (1-t)v_theta(x_t,t)`, explains the endpoint caveat,
+and compares Euler, Heun, and RK4 from exactly the same initial noise tensor.
 
 ### 03: Gaussian/PCA noise alignment
 
-Fit target-class and full-data Gaussian statistics, visualize the difference
-between their denoisers, and apply that correction only during a high-noise
-window. A zero-strength control and explicit verdict separate partial coarse
-steering from full class-conditional generation.
+Before using a Gaussian correction for steering, we test whether low-rank
+covariance structure can denoise held-out MNIST pixels. We then visualize the
+target-class minus full-data denoiser in 2D and apply it only during a
+high-noise window. A zero-strength control separates partial coarse steering
+from full class-conditional generation.
 
 ### 04: Post-hoc gradient guidance
 
-Visualize a class-posterior objective and differentiate it through the model's
-clean estimate during sampling. Compare its behavior and cost with the
-forward-only Gaussian/PCA correction.
+Covariance guidance is efficient but restrictive. A differentiable class
+objective is more flexible, so this note visualizes its gradient and compares
+its behavior and backward-pass cost with the forward-only Gaussian/PCA
+correction.
 
 ### 05: Hidden-feature steering and method comparison
 
-Measure class readability across time, visualize hidden features, learn a
-covariance-aware target-vs-rest direction, and compare activation steering with
-noise alignment and gradient guidance. Probes use held-out examples, a
-shuffled-label control, a fresh-batch confusion matrix, and an independent null
-direction.
+The final toy note asks whether a forward-only edit can act inside the frozen
+network. It first measures whether class is readable from held-out hidden
+features, then tests a target-vs-rest direction against shuffled controls and
+compares activation steering with noise alignment and gradient guidance.
 
 ## Terminology
 
@@ -96,7 +99,6 @@ direction.
 |---|---|
 | generative model | A learned procedure for producing new samples that resemble a data distribution |
 | generative sampling | Transform fresh base noise into a new data-like sample without a paired known clean answer |
-| reconstruction | Estimate the clean version of one particular observed or corrupted item |
 | unconditional generator | A generator that receives no requested class or prompt |
 | base distribution | The easy Gaussian source used to start generation |
 | I-CFM | Independent source/data coupling with a linear conditional path |
@@ -121,20 +123,21 @@ fixed. The tables show several quantities because target-class rate alone does
 not establish that a steering method preserves fidelity or diversity:
 
 - target-class rate;
-- sliced Wasserstein distance to target examples;
+- Wasserstein distance to target examples;
 - mean error relative to the target distribution;
 - diversity ratio;
 - wall-clock time.
 
-The eight-Gaussian flow map additionally reports mode coverage, component
-occupancy error, within-component spread, and SWD. These are broad sanity checks,
-not a claim that the learned and target densities are exactly equal.
+The circle adds radial and angular-occupancy checks. The eight-Gaussian flow map
+adds mode coverage, component occupancy error, and within-component spread.
+These are broad sanity checks, not a claim that the learned and target
+densities are exactly equal.
 
-SWD projects both sample clouds onto many one-dimensional directions, sorts the
-projected positions, compares them, and aggregates the discrepancies. Lower is
-better. The visual construction appears in notebook `01`; it should be read
-together with mode coverage and diversity rather than as a complete quality
-certificate.
+The reported Wasserstein distance is a finite-sample estimate: equal-size
+subsets are paired by minimum total Euclidean matching cost, and the mean
+matched distance is reported. Lower is better. The visual construction appears
+in notebook `01`; it should be read with coverage and diversity rather than as
+a complete quality certificate.
 
 ## Questions for Class
 
@@ -148,17 +151,22 @@ certificate.
 8. Which conclusions from the 2D examples require new evidence before applying
    them to image diffusion models?
 
-## Optional image bridge
+## CIFAR-10 image experiment
 
-CIFAR-10 is not a seventh core note. The optional executable bridge uses the
-official unconditional NVIDIA EDM checkpoint with deterministic sampling and a
-class-minus-full PCA denoiser correction. Its manifest locks checkpoint hashes,
-PCA provenance, evaluator, calibration/evaluation seed splits, and paired zero
-and wrong-class controls. See `optional/CIFAR10_BRIDGE.md`.
+The toy examples make mechanisms visible; CIFAR-10 checks whether the same
+distribution-level correction measurably changes a real pretrained nonlinear
+generator. The experiment uses the official unconditional NVIDIA EDM
+checkpoint with deterministic sampling and a class-minus-full PCA denoiser
+correction. Its manifest locks checkpoint hashes, PCA provenance, evaluator,
+calibration/evaluation seed splits, and paired zero- and wrong-class controls.
+Read the [executed CIFAR-10 notebook](executed/cifar10_steering_with_unconditional_edm.ipynb)
+and [experiment contract](optional/CIFAR10_BRIDGE.md).
 
 ## References
 
 - Lipman et al., [*Flow Matching for Generative Modeling*](https://arxiv.org/abs/2210.02747).
+- Karras et al., [*Elucidating the Design Space of Diffusion-Based Generative Models*](https://arxiv.org/abs/2206.00364).
+- Li, Dai, and Qu, [*Understanding Generalizability of Diffusion Models Requires Rethinking the Hidden Gaussian Structure*](https://arxiv.org/abs/2410.24060).
 - Song, Meng, and Ermon, [*Denoising Diffusion Implicit Models*](https://arxiv.org/abs/2010.02502).
 - Wang, Belkin, and Wang, [*General and Efficient Steering of Diffusion Models*](https://arxiv.org/abs/2602.11395).
 - Ho et al., [*Denoising Diffusion Probabilistic Models*](https://arxiv.org/abs/2006.11239).

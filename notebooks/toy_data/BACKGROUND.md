@@ -7,15 +7,8 @@ pre-class notes stay visual; these details explain why the formulas are valid.
 
 We observe a finite training dataset sampled from an unknown data distribution.
 A generative model learns a procedure whose new outputs resemble that
-distribution. It is not a lookup table and it does not need to reconstruct one
-particular training example during generation.
-
-Generative sampling and reconstruction answer different questions. Sampling
-draws fresh base noise and produces a new data-like output with no paired clean
-answer. Reconstruction starts from an observation tied to one particular item
-and estimates that same item. A generative model may still compute a denoised
-estimate internally during sampling; that does not turn sampling into retrieval
-or reconstruction.
+distribution. It is not a lookup table. During ordinary generation, fresh base
+noise is transformed into a new output; no paired clean answer is supplied.
 
 For a deterministic flow model, the complete sampling procedure is
 
@@ -69,20 +62,55 @@ field depends on both location and time because many sampled paths overlap.
 
 ## 3. Velocity-to-denoiser conversion
 
-Rearrange the path:
+First consider one training pair, for which both endpoints are known. Write
 
 ```text
-x_data = x_t + (1-t) (x_data - x_noise).
+u = x_data - x_noise.
 ```
 
-Replacing the exact pair velocity with the learned velocity gives
+The path identity can then be rearranged exactly:
+
+```text
+x_data = x_t + (1-t) u.
+```
+
+At generation time the network sees only `(x_t,t)`, not `x_noise`,
+`x_data`, or the pair-specific `u`. Under mean-squared-error training, the
+population-optimal prediction is the conditional average
+
+```text
+v*(x_t,t) = E[u | x_t,t].
+```
+
+Because `x_t` and `t` are fixed inside this conditional expectation,
+
+```text
+x_t + (1-t) v*(x_t,t)
+    = E[x_t + (1-t)u | x_t,t]
+    = E[x_data | x_t,t].
+```
+
+This motivates the trained model's denoiser view:
 
 ```text
 D_theta(x_t,t) = x_t + (1-t) v_theta(t,x_t).
 ```
 
-This is a clean-data estimate for the linear parameterization. It does not mean
-the MLP was trained with a separate diffusion-denoising loss.
+The estimate is a conditional average over plausible clean endpoints. It need
+not equal one pair's endpoint; where several outcomes are plausible it may lie
+between modes. In image models, posterior averaging is one reason a
+mean-squared-error estimate can look smooth or blurry.
+
+For `t < 1`, the same information can be written as
+
+```text
+v_theta(t,x_t) = (D_theta(x_t,t) - x_t) / (1-t).
+```
+
+This inverse conversion becomes ill-conditioned near `t=1` and is undefined
+at the endpoint. Both formulas are specific to this linear path. They are a
+parameterization bridge, not evidence that the MLP was trained with a separate
+diffusion-denoising objective.
 
 ## 4. Deterministic ODE sampling
 
@@ -131,6 +159,27 @@ D(y,sigma) = mu + C (C + sigma^2 I)^(-1) (y-mu).
 Along directions with high data variance, the denoiser trusts the observation
 more. Along low-variance directions, it shrinks more strongly toward the mean.
 In high dimensions, the eigendecomposition of `C` gives the usual PCA form.
+
+If `C = U diag(lambda_i) U^T`, then each centered principal-component
+coordinate is multiplied by
+
+```text
+lambda_i / (lambda_i + sigma^2).
+```
+
+This makes the behavior concrete: directions with large dataset variance are
+retained more strongly, while low-variance directions shrink toward the mean.
+Notebook `03` visualizes these directions as MNIST eigendigits and verifies
+on held-out noisy images that both an all-digit and a digit-specific Gaussian
+posterior mean reduce pixel MSE.
+
+[Li, Dai, and Qu (NeurIPS 2024)](https://arxiv.org/abs/2410.24060) report that
+diffusion denoisers become increasingly linear in a generalization regime and
+that their best linear approximations are close to empirical Gaussian
+denoisers. Their experiments include FFHQ and checks on CIFAR-10, AFHQ, and
+LSUN-Churches. That paper does not provide the ImageNet experiment for these
+notes. Our larger image evidence is instead the manifest-locked CIFAR-10
+experiment using NVIDIA's official unconditional EDM checkpoint.
 
 The notebook noise-alignment signal is
 
@@ -188,7 +237,12 @@ The notebooks check three empirical requirements instead of assuming them:
 2. direction alignment is measured rather than assumed across time;
 3. injection improves control without unacceptable fidelity or diversity loss.
 
-## 9. Reading the eight-Gaussian flow map
+## 9. Reading the circle and eight-Gaussian flow maps
+
+The circle asks whether the model can form thin, continuous curved support
+rather than merely choosing among a few centers. Radial error checks ring
+thickness and location; angular occupancy checks for gaps; Wasserstein distance
+compares the generated and target point clouds.
 
 The eight-Gaussian example stores a deterministic trajectory for every sampled
 base point. Only after sampling, each endpoint is assigned to its nearest data
@@ -198,22 +252,14 @@ toward a component center.
 
 Mode coverage asks whether every data component receives nontrivial generated
 mass. Occupancy error compares generated and target component frequencies. The
-mean nearest-component distance checks within-component spread, while sliced
-Wasserstein distance compares the full generated and target point sets. No one
-metric establishes distributional equality.
+mean nearest-component distance checks within-component spread. No one metric
+establishes distributional equality.
 
-For each two-dimensional unit direction `d`, SWD projects both clouds onto a
-line, sorts the projected values, and compares corresponding sorted positions.
-With `K` directions and `n` points, the implementation uses
-
-```text
-SWD = sqrt(mean over k,i of (sort(x @ d_k)[i] - sort(y @ d_k)[i])^2).
-```
-
-Repeating across directions makes the comparison sensitive to more than the
-mean of the cloud. Lower is better. A small SWD is useful evidence of broad
-distributional agreement, but separate mode-coverage and spread checks can
-still reveal failures hidden by one scalar summary.
+For Wasserstein distance, the implementation chooses equal-size deterministic
+subsets and solves a minimum-cost one-to-one matching using Euclidean distance.
+It reports the mean length of the matched pairs. This is a finite-sample
+empirical estimate: lower is better, but separate coverage and spread checks
+can still reveal failures hidden by one scalar summary.
 
 ## 10. Scope boundary
 
@@ -227,6 +273,8 @@ where every state and vector is visible:
 - offline feature-direction learning and online hidden-feature injection;
 - paired ablations over timing, strength, quality, diversity, and runtime.
 
-Moving to images requires a real denoiser parameterization, high-dimensional PCA
-or sample-space computation, layer selection, activation tensors, stronger
-quality metrics, and substantially broader validation.
+Notebook `03` already moves the Gaussian denoiser to MNIST pixels, and the
+CIFAR-10 image experiment uses a real pretrained EDM denoiser with
+high-dimensional PCA statistics. Activation steering of an image U-Net still
+requires a specified layer, activation tensors, held-out probes, matched
+controls, stronger quality metrics, and broader validation.

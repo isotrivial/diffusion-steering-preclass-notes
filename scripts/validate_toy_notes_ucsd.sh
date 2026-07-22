@@ -14,6 +14,8 @@ source "${VENV_DIR}/bin/activate"
 
 export TOY_NOTES_TRAIN_STEPS=2500
 export TOY_NOTES_EIGHT_STEPS=3000
+export TOY_NOTES_CIRCLE_STEPS=3000
+export MNIST_DATA_DIR="${MNIST_DATA_DIR:-/data/qingsong/sos/data/MNIST/raw}"
 
 python -m pip install --disable-pip-version-check --quiet \
   -r notebooks/toy_data/requirements-notes.txt
@@ -61,14 +63,23 @@ if any(record.get("status") != "passed" for record in records):
 print("validated notebooks:")
 minimum_images = {
     "00_diffusion_and_flow_matching_foundations.ipynb": 4,
-    "01_train_unconditional_flow_matching.ipynb": 7,
-    "03_gaussian_denoisers_and_noise_alignment.ipynb": 3,
+    "01_train_unconditional_flow_matching.ipynb": 9,
+    "02_denoisers_and_deterministic_samplers.ipynb": 4,
+    "03_gaussian_denoisers_and_noise_alignment.ipynb": 5,
     "05_activation_steering_and_method_comparison.ipynb": 8,
 }
 required_text = {
-    "01_train_unconditional_flow_matching.ipynb": "eight-mode map release verdict: PASS",
-    "03_gaussian_denoisers_and_noise_alignment.ipynb": "partial coarse steering supported: True",
-    "05_activation_steering_and_method_comparison.ipynb": "held-out class-decodability supported: True",
+    "01_train_unconditional_flow_matching.ipynb": [
+        "circle geometry verdict: PASS",
+        "eight-mode map release verdict: PASS",
+    ],
+    "03_gaussian_denoisers_and_noise_alignment.ipynb": [
+        "MNIST Gaussian denoising verdict: PASS",
+        "partial coarse steering supported: True",
+    ],
+    "05_activation_steering_and_method_comparison.ipynb": [
+        "held-out class-decodability supported: True",
+    ],
 }
 for record in records:
     executed = json.loads(Path(record["executed"]).read_text())
@@ -94,9 +105,10 @@ for record in records:
             if isinstance(text_plain, list):
                 text_plain = "".join(text_plain)
             text_outputs.append(text_plain)
-    expected = required_text.get(record["name"])
-    if expected and expected not in "\n".join(text_outputs):
-        raise SystemExit(f"missing scientific validation text in {record['name']}: {expected}")
+    combined_text = "\n".join(text_outputs)
+    for expected in required_text.get(record["name"], []):
+        if expected not in combined_text:
+            raise SystemExit(f"missing scientific validation text in {record['name']}: {expected}")
     print(f"- {record['name']}: {record['seconds']:.1f}s, {image_count} inline plots")
 PY
 

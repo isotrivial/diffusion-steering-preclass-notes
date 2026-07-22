@@ -72,9 +72,9 @@ for cell in notebook.get("cells", []):
 joined = "\n".join(text)
 if image_count < 3:
     raise SystemExit(f"expected at least three embedded figures, found {image_count}")
-if "CIFAR-10 EDM bridge release verdict: PASS" not in joined:
-    raise SystemExit("the optional bridge did not pass its scientific release checks")
-print(f"validated optional CIFAR-10 bridge with {image_count} embedded figures")
+if "CIFAR-10 EDM image experiment verdict: PASS" not in joined:
+    raise SystemExit("the CIFAR-10 experiment did not pass its scientific release checks")
+print(f"validated CIFAR-10 experiment with {image_count} embedded figures")
 PY
 
 python - "${VALIDATION_DIR}/results.json" <<'PY'
