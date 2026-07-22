@@ -7,8 +7,8 @@ unconditional; class labels are used only by post-hoc steering methods.
 
 from __future__ import annotations
 
-import hashlib
 import gzip
+import hashlib
 import math
 import os
 import random

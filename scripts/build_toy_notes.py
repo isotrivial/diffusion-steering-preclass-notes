@@ -1883,10 +1883,11 @@ one MLP layer.
 
 We collect the direction at `t = 0.90`, where the forward activations are close
 to clean data and strongly class-decodable. Collection time and intervention
-window are different choices: a small paired calibration on separate noise
-seeds selected the settings below by target Wasserstein distance. The activation-only and
-two-stage methods are calibrated separately because early noise alignment
-changes the trajectories seen by the later activation edit.
+window are different choices. A prior paired calibration on separate noise
+seeds selected the fixed settings below; this held-out comparison reports the
+new Wasserstein matching metric. The activation-only and two-stage methods were
+calibrated separately because early noise alignment changes the trajectories
+seen by the later activation edit.
 '''),
         code(r'''
 set_seed(SEED + 50)
