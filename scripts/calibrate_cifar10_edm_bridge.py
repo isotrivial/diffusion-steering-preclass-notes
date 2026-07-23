@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the predeclared CIFAR-10 EDM strength calibration split."""
+"""Run the locked CIFAR-10 EDM strength-and-window calibration split."""
 
 from __future__ import annotations
 

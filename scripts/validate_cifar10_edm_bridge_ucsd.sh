@@ -72,8 +72,8 @@ for cell in notebook.get("cells", []):
 joined = "\n".join(text)
 if image_count < 3:
     raise SystemExit(f"expected at least three embedded figures, found {image_count}")
-if "CIFAR-10 EDM image experiment verdict: PASS" not in joined:
-    raise SystemExit("the CIFAR-10 experiment did not pass its scientific release checks")
+if "CIFAR-10 EDM protocol verdict: PASS" not in joined:
+    raise SystemExit("the CIFAR-10 experiment did not pass its locked protocol checks")
 print(f"validated CIFAR-10 experiment with {image_count} embedded figures")
 PY
 
@@ -88,7 +88,7 @@ if result["zero_endpoint_max_abs"] >= 1e-6:
 if result["deterministic_repeat_max_abs"] >= 1e-6:
     raise SystemExit("deterministic repeat tolerance failed")
 if result["release_status"] != "PASS" or not all(result["checks"].values()):
-    raise SystemExit("result summary did not pass every scientific check")
+    raise SystemExit("result summary did not pass every protocol check")
 print("validated JSON result summary")
 PY
 

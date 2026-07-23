@@ -12,14 +12,17 @@ coordinate.
 
 ## Notebook order
 
-| # | Notebook | Main question |
+| # | Read with outputs | Main question |
 |---|---|---|
-| 00 | `00_diffusion_and_flow_matching_foundations.ipynb` | How do noising paths, velocities, denoisers, and samplers differ? |
-| 01 | `01_train_unconditional_flow_matching.ipynb` | Can an unconditional MLP learn clusters, a continuous circle, and eight separated modes? |
-| 02 | `02_denoisers_and_deterministic_samplers.ipynb` | Why is the velocity conversion a conditional clean estimate, and how do Euler, Heun, and RK4 compare? |
-| 03 | `03_gaussian_denoisers_and_noise_alignment.ipynb` | Can Gaussian/PCA structure denoise MNIST pixels and provide coarse high-noise control? |
-| 04 | `04_training_free_gradient_guidance.ipynb` | What does post-hoc gradient guidance gain and cost? |
-| 05 | `05_activation_steering_and_method_comparison.ipynb` | When is class information readable in hidden features, and how do the steering methods compare? |
+| 00 | [Generative-model foundations](executed/00_diffusion_and_flow_matching_foundations.ipynb) | How do noising paths, velocities, denoisers, and samplers differ? |
+| 01 | [Unconditional flow matching](executed/01_train_unconditional_flow_matching.ipynb) | Can an unconditional MLP learn clusters, a continuous circle, and eight separated modes? |
+| 02 | [Denoisers and deterministic samplers](executed/02_denoisers_and_deterministic_samplers.ipynb) | Why is the velocity conversion a conditional clean estimate, and how do Euler, Heun, and RK4 compare? |
+| 03 | [Gaussian/PCA denoisers and noise alignment](executed/03_gaussian_denoisers_and_noise_alignment.ipynb) | Can Gaussian/PCA structure denoise MNIST pixels and provide coarse high-noise control? |
+| 04 | [Training-free gradient guidance](executed/04_training_free_gradient_guidance.ipynb) | What does post-hoc gradient guidance gain and cost? |
+| 05 | [Activation steering and method comparison](executed/05_activation_steering_and_method_comparison.ipynb) | When is class information readable in hidden features, and how do the steering methods compare? |
+
+The links above always open the published notebooks with inline outputs. The
+same filenames one directory above are output-free implementation sources.
 
 The older source notebooks (`flow_matching_*.ipynb`) are retained as research
 provenance. They are not part of the pre-class reading sequence.
@@ -27,8 +30,8 @@ provenance. They are not part of the pre-class reading sequence.
 The [executed CIFAR-10 experiment](executed/cifar10_steering_with_unconditional_edm.ipynb)
 follows the six lightweight notes. It uses NVIDIA's unconditional CIFAR-10 EDM
 checkpoint and a class-minus-full PCA denoiser correction. See
-`optional/CIFAR10_BRIDGE.md` for its locked assets, paired controls, passing
-A6000 checks, and measured limits.
+`optional/CIFAR10_BRIDGE.md` for its locked assets, paired controls, A6000
+protocol checks, rejected intermediate run, and measured limits.
 
 ## Why the sequence is ordered this way
 
