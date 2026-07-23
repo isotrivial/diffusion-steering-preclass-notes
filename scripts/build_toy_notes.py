@@ -882,8 +882,9 @@ class-level objective and changes with the state and time.
 grid_1d = torch.linspace(-4.5, 4.5, 80, device=device)
 gx, gy = torch.meshgrid(grid_1d, grid_1d, indexing="xy")
 grid = torch.stack([gx.reshape(-1), gy.reshape(-1)], dim=1).requires_grad_(True)
-posterior = class_log_probabilities(grid, stats).softmax(dim=1)[:, TARGET_CLASS]
-gradient = torch.autograd.grad(torch.log(posterior.clamp_min(1e-8)).sum(), grid)[0]
+log_posterior = class_log_probabilities(grid, stats).log_softmax(dim=1)[:, TARGET_CLASS]
+posterior = log_posterior.exp()
+gradient = torch.autograd.grad(log_posterior.sum(), grid)[0]
 
 probability_image = posterior.reshape(gx.shape).detach().cpu()
 fig, ax = plt.subplots(figsize=(6.5, 5.5))
