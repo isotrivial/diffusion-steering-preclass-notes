@@ -888,10 +888,11 @@ gradient = torch.autograd.grad(torch.log(posterior.clamp_min(1e-8)).sum(), grid)
 probability_image = posterior.reshape(gx.shape).detach().cpu()
 fig, ax = plt.subplots(figsize=(6.5, 5.5))
 contour = ax.contourf(gx.cpu(), gy.cpu(), probability_image, levels=20, cmap="viridis")
-subset = torch.arange(0, grid.shape[0], 160, device=device)
-direction = gradient[subset] / gradient[subset].norm(dim=1, keepdim=True).clamp_min(1e-6)
+arrow_points = grid.reshape(*gx.shape, 2)[::8, ::8].reshape(-1, 2)
+arrow_gradient = gradient.reshape(*gx.shape, 2)[::8, ::8].reshape(-1, 2)
+direction = arrow_gradient / arrow_gradient.norm(dim=1, keepdim=True).clamp_min(1e-6)
 ax.quiver(
-    grid[subset, 0].detach().cpu(), grid[subset, 1].detach().cpu(),
+    arrow_points[:, 0].detach().cpu(), arrow_points[:, 1].detach().cpu(),
     direction[:, 0].detach().cpu(), direction[:, 1].detach().cpu(),
     color="white", alpha=0.75, scale=18,
 )
