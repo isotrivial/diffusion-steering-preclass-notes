@@ -51,23 +51,18 @@ if not (NOTES_DIR / "toy_notes.py").exists():
     NOTES_DIR = Path("notebooks/toy_data")
 sys.path.insert(0, str(NOTES_DIR.resolve()))
 
-from IPython import get_ipython
-
-ipython = get_ipython()
-if ipython is not None:
-    ipython.run_line_magic("matplotlib", "inline")
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
 
 from toy_notes import *
+from notebook_views import *
 
 SEED = 2026
 set_seed(SEED)
 device = choose_device()
-print(environment_summary(device))
+print("device:", device)
 '''
 
 
@@ -107,47 +102,7 @@ distribution, trained velocity model, and sampler work together. During
 generation, each fresh noise seed starts a new sample.
 '''),
         code(r'''
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
-
-def process_box(ax, xy, width, height, text, color):
-    patch = FancyBboxPatch(
-        xy, width, height,
-        boxstyle="round,pad=0.02,rounding_size=0.02",
-        facecolor=color, edgecolor="#333333", linewidth=1.1,
-    )
-    ax.add_patch(patch)
-    ax.text(xy[0] + width / 2, xy[1] + height / 2, text, ha="center", va="center", fontsize=10)
-
-def process_arrow(ax, start, end):
-    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=15, linewidth=1.4, color="#333333"))
-
-fig, axes = plt.subplots(2, 1, figsize=(11.5, 5.6))
-for ax in axes:
-    ax.set(xlim=(0, 1), ylim=(0, 1))
-    ax.axis("off")
-
-axes[0].set_title("Training: use examples to learn a reusable velocity rule", loc="left", fontsize=12)
-process_box(axes[0], (0.02, 0.56), 0.20, 0.25, "data examples\n$x_{data}$", "#D9EAD3")
-process_box(axes[0], (0.02, 0.13), 0.20, 0.25, "noise samples\n$x_{noise}$", "#E7E6E6")
-process_box(axes[0], (0.36, 0.34), 0.25, 0.28, "build a training pair\n$(x_t, x_{data}-x_{noise})$", "#FCE5CD")
-process_box(axes[0], (0.75, 0.34), 0.21, 0.28, "fit velocity model\n$v_\\theta(t,x_t)$", "#CFE2F3")
-process_arrow(axes[0], (0.22, 0.68), (0.36, 0.51))
-process_arrow(axes[0], (0.22, 0.25), (0.36, 0.45))
-process_arrow(axes[0], (0.61, 0.48), (0.75, 0.48))
-axes[0].text(0.02, 0.02, "The network input contains $(t,x_t)$, not class labels.", fontsize=9, color="#555555")
-
-axes[1].set_title("Generation: start from fresh noise; no clean target is supplied", loc="left", fontsize=12)
-process_box(axes[1], (0.02, 0.34), 0.20, 0.28, "fresh noise seed\n$x_{noise}$", "#E7E6E6")
-process_box(axes[1], (0.38, 0.34), 0.25, 0.28, "frozen $v_\\theta$\n+ ODE sampler", "#CFE2F3")
-process_box(axes[1], (0.78, 0.34), 0.18, 0.28, "new generated\nsample", "#EAD1DC")
-process_arrow(axes[1], (0.22, 0.48), (0.38, 0.48))
-process_arrow(axes[1], (0.63, 0.48), (0.78, 0.48))
-axes[1].text(0.02, 0.12, "Different seeds provide diversity.", fontsize=9, color="#555555")
-axes[1].text(0.66, 0.12, "Same seed + same settings = same endpoint.", fontsize=9, color="#555555")
-
-fig.suptitle("How a flow model learns and generates", fontsize=14, y=1.01)
-plt.tight_layout()
-plt.show()
+plot_generator_pipeline()
 '''),
         markdown(r'''
 ### Unconditional, conditional, and post-hoc control
@@ -217,8 +172,8 @@ fixed_noise = sample_base(clean_small.shape[0], device=device)
 times = [1.0, 0.70, 0.35, 0.08]
 fig, axes = plt.subplots(1, len(times), figsize=(15, 3.8))
 for ax, t_value in zip(axes, times):
-    t = torch.full((clean_small.shape[0],), t_value, device=device)
-    noisy = forward_noising(clean_small, t, fixed_noise)
+    t = torch.full((clean_small.shape[0], 1), t_value, device=device)
+    noisy = (1 - t) * fixed_noise + t * clean_small
     plot_labeled_points(noisy, labels_small, ax=ax, title=f"t={t_value:.2f}", alpha=0.42)
     ax.set_xlim(-5, 5)
     ax.set_ylim(-5, 5)
@@ -241,25 +196,14 @@ is not available during generation.
 '''),
         code(r'''
 set_seed(SEED + 1)
-x_data, pair_labels = sample_labeled_mixture(24, device=device)
+x_data, _ = sample_labeled_mixture(24, device=device)
 x_noise = sample_base(24, device=device)
 t_value = 0.42
-x_t = forward_noising(x_data, torch.full((24,), t_value, device=device), x_noise)
-u_t = x_data - x_noise
+t = torch.full((24, 1), t_value, device=device)
+x_t = (1 - t) * x_noise + t * x_data
+target_velocity = x_data - x_noise
 
-fig, ax = plt.subplots(figsize=(6, 6))
-ax.scatter(x_noise[:, 0].cpu(), x_noise[:, 1].cpu(), s=18, color="#777777", label="noise endpoint")
-ax.scatter(x_data[:, 0].cpu(), x_data[:, 1].cpu(), s=28, color="#0072B2", label="data endpoint")
-ax.scatter(x_t[:, 0].cpu(), x_t[:, 1].cpu(), s=24, color="#E69F00", label="training state")
-ax.quiver(
-    x_t[:, 0].cpu(), x_t[:, 1].cpu(),
-    u_t[:, 0].cpu(), u_t[:, 1].cpu(),
-    angles="xy", scale_units="xy", scale=3.2, width=0.004, color="#222222", alpha=0.75,
-)
-ax.set_title("One flow-matching minibatch")
-ax.set_aspect("equal")
-ax.legend(frameon=False)
-plt.show()
+plot_flow_matching_batch(x_noise, x_data, x_t, target_velocity)
 '''),
         markdown(r'''
 ## 5. Why keep the model and sampler separate?
@@ -328,21 +272,32 @@ This is I-CFM. It is not optimal-transport CFM because we do not solve an
 optimal coupling between noise and data samples.
 '''),
         code(r'''
-# The helper implements the four lines above. Later notebooks reuse this model.
-model, losses, _ = load_or_train_model(device=device)
-print("parameters:", sum(p.numel() for p in model.parameters()))
+def train_visible_flow(model, steps):
+    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-5)
+    losses = []
+    model.train()
+
+    for step in range(steps):
+        x_data, _ = sample_labeled_mixture(1024, device=device)
+        x_noise = sample_base(1024, device=device)
+        t = torch.rand(1024, device=device)
+        x_t = (1 - t[:, None]) * x_noise + t[:, None] * x_data
+        target_velocity = x_data - x_noise
+
+        loss = (model(t, x_t) - target_velocity).square().mean()
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        losses.append(loss.item())
+
+    model.eval()
+    return losses
+
+model, losses, trained_now = load_or_train_model(device=device, trainer=train_visible_flow)
+print("trained now:", trained_now, "| parameters:", sum(p.numel() for p in model.parameters()))
 '''),
         code(r'''
-fig, ax = plt.subplots(figsize=(7, 3.5))
-ax.plot(losses, color="#0072B2", alpha=0.35, lw=0.8)
-if len(losses) >= 100:
-    window = 100
-    smooth = np.convolve(losses, np.ones(window) / window, mode="valid")
-    ax.plot(np.arange(window - 1, len(losses)), smooth, color="#D55E00", lw=2, label="100-step mean")
-    ax.legend(frameon=False)
-ax.set(xlabel="optimization step", ylabel="MSE", title="Flow-matching training loss")
-ax.grid(alpha=0.2)
-plt.show()
+plot_loss_curve(losses, title="Flow-matching training loss")
 '''),
         markdown(r'''
 ## 2. How does a fitted field become samples?
@@ -360,44 +315,12 @@ trajectory, sample_seconds = timed_sample(base_velocity(model), x0_eval, steps=8
 generated = trajectory[-1].to(device)
 target, target_labels = sample_labeled_mixture(3000, device=device)
 
-fig, axes = plt.subplots(1, 3, figsize=(14, 4.3))
-axes[0].scatter(x0_eval[:, 0].cpu(), x0_eval[:, 1].cpu(), s=6, alpha=0.25, color="#777777")
-axes[0].set_title("Initial Gaussian noise")
-plot_labeled_points(target, target_labels, ax=axes[1], title="Target data", alpha=0.35)
-axes[2].scatter(generated[:, 0].cpu(), generated[:, 1].cpu(), s=7, alpha=0.35, color="#0072B2")
-axes[2].set_title("Generated endpoints")
-for ax in axes:
-    ax.set_aspect("equal")
-    ax.set_xlim(-4.5, 4.5)
-    ax.set_ylim(-4.2, 4.5)
-    ax.set_xticks([])
-    ax.set_yticks([])
-plt.tight_layout()
-plt.show()
+plot_flow_endpoints(x0_eval, target, target_labels, generated)
 print(f"sampling time: {sample_seconds:.3f} s")
 '''),
         code(r'''
-stats = estimate_gaussian_stats(target, target_labels)
-predicted = predict_classes(generated, stats)
-generated_balance = torch.bincount(predicted, minlength=len(CLASS_NAMES)).float()
-generated_balance /= generated_balance.sum()
-
-diagnostics = pd.DataFrame({
-    "diagnostic": [
-        "Wasserstein distance to full target",
-        "generated class balance max error",
-        "smallest generated mode fraction",
-        "all samples finite",
-    ],
-    "value": [
-        wasserstein_distance(generated, target),
-        float(torch.max(torch.abs(generated_balance - 1 / len(CLASS_NAMES))).cpu()),
-        float(generated_balance.min().cpu()),
-        bool(torch.isfinite(generated).all()),
-    ],
-})
-display(diagnostics)
-print("generated class balance:", generated_balance.cpu().numpy().round(3))
+diagnostics = pd.DataFrame(flow_endpoint_diagnostics(generated, target, target_labels))
+display(diagnostics.round(4))
 '''),
         markdown(r'''
 ### Why use Wasserstein distance in addition to a plot?
@@ -412,71 +335,10 @@ The lines below make the definition literal. Lower is better. We still inspect
 mode coverage and spread because one scalar cannot diagnose every failure.
 '''),
         code(r'''
-from scipy.optimize import linear_sum_assignment
-
-visual_count = 120
-visual_indexes = torch.linspace(0, generated.shape[0] - 1, visual_count).round().long().to(device)
-target_indexes = torch.linspace(0, target.shape[0] - 1, visual_count).round().long().to(device)
-visual_generated = generated[visual_indexes]
-visual_target = target[target_indexes]
-matching_costs = torch.cdist(visual_generated, visual_target).cpu().numpy()
-generated_rows, target_columns = linear_sum_assignment(matching_costs)
-matched_distances = matching_costs[generated_rows, target_columns]
-
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
-axes[0].scatter(
-    visual_target[:, 0].cpu(), visual_target[:, 1].cpu(),
-    s=16, alpha=0.45, color="#D55E00", label="target",
-)
-axes[0].scatter(
-    visual_generated[:, 0].cpu(), visual_generated[:, 1].cpu(),
-    s=16, alpha=0.45, color="#0072B2", label="generated",
-)
-axes[0].set(title="1. Two empirical distributions", aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.2, 4.5))
-axes[0].set_xticks([])
-axes[0].set_yticks([])
-axes[0].legend(frameon=False, loc="upper left")
-
-for row, column in zip(generated_rows, target_columns):
-    endpoints = torch.stack([visual_generated[row], visual_target[column]]).cpu()
-    axes[1].plot(endpoints[:, 0], endpoints[:, 1], color="#999999", alpha=0.22, lw=0.7)
-axes[1].scatter(visual_target[:, 0].cpu(), visual_target[:, 1].cpu(), s=13, alpha=0.55, color="#D55E00")
-axes[1].scatter(visual_generated[:, 0].cpu(), visual_generated[:, 1].cpu(), s=13, alpha=0.55, color="#0072B2")
-axes[1].set(title="2. Minimum-cost one-to-one matching", aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.2, 4.5))
-axes[1].set_xticks([])
-axes[1].set_yticks([])
-
-axes[2].hist(matched_distances, bins=18, color="#0072B2", alpha=0.82)
-axes[2].axvline(matched_distances.mean(), color="#D55E00", lw=2, label="mean matched distance")
-axes[2].set(title="3. Distances in the optimal matching", xlabel="matched Euclidean distance", ylabel="number of pairs")
-axes[2].legend(frameon=False)
-axes[2].grid(alpha=0.18, axis="y")
-
-fig.suptitle(f"Empirical Wasserstein distance = {matched_distances.mean():.3f}", y=1.02)
-plt.tight_layout()
-plt.show()
+_ = plot_wasserstein_matching(generated, target)
 '''),
         code(r'''
-# A vector field is easier to understand when it is drawn.
-grid_1d = torch.linspace(-4, 4, 19, device=device)
-gx, gy = torch.meshgrid(grid_1d, grid_1d, indexing="xy")
-grid = torch.stack([gx.reshape(-1), gy.reshape(-1)], dim=1)
-
-fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
-for ax, t_value in zip(axes, [0.10, 0.50, 0.90]):
-    t = torch.full((grid.shape[0],), t_value, device=device)
-    with torch.no_grad():
-        vectors = model(t, grid)
-    ax.quiver(
-        grid[:, 0].cpu(), grid[:, 1].cpu(), vectors[:, 0].cpu(), vectors[:, 1].cpu(),
-        angles="xy", scale_units="xy", scale=18, width=0.003, color="#333333",
-    )
-    ax.set_title(f"Learned velocity at t={t_value:.2f}")
-    ax.set_aspect("equal")
-    ax.set_xlim(-4.3, 4.3)
-    ax.set_ylim(-4.3, 4.3)
-plt.tight_layout()
-plt.show()
+plot_velocity_field(model, device)
 '''),
         markdown(r'''
 ## 3. Does the method learn a curved distribution?
@@ -488,96 +350,16 @@ separate unconditional model and ask whether it forms the ring without leaving
 large angular gaps.
 '''),
         code(r'''
-main_checkpoint_digest_before = file_sha256(CHECKPOINT_PATH)
-circle_train_started = time.perf_counter()
-circle_model, circle_losses, _ = load_or_train_circle_model(device=device)
-circle_train_seconds = time.perf_counter() - circle_train_started
-assert file_sha256(CHECKPOINT_PATH) == main_checkpoint_digest_before
-
-set_seed(SEED + 71)
-circle_x0 = sample_base(4096, device=device)
-circle_target, _ = sample_noisy_circle(4096, device=device)
-circle_sample_started = time.perf_counter()
-circle_path = integrate_ode(base_velocity(circle_model), circle_x0, steps=80, method="heun")
-circle_sample_seconds = time.perf_counter() - circle_sample_started
-circle_generated = circle_path[-1].to(device)
-
-target_angles = torch.remainder(torch.atan2(circle_target[:, 1], circle_target[:, 0]), 2 * np.pi)
-generated_angles = torch.remainder(torch.atan2(circle_generated[:, 1], circle_generated[:, 0]), 2 * np.pi)
-
-fig, axes = plt.subplots(1, 4, figsize=(16, 3.8))
-axes[0].scatter(circle_x0[:, 0].cpu(), circle_x0[:, 1].cpu(), s=5, alpha=0.20, color="#777777")
-axes[0].set_title("Gaussian source")
-axes[1].scatter(circle_target[:, 0].cpu(), circle_target[:, 1].cpu(), c=target_angles.cpu(), cmap="twilight", s=5, alpha=0.35)
-axes[1].set_title("Noisy-circle target")
-axes[2].scatter(circle_generated[:, 0].cpu(), circle_generated[:, 1].cpu(), c=generated_angles.cpu(), cmap="twilight", s=5, alpha=0.35)
-axes[2].set_title("Generated endpoints")
-axes[3].plot(circle_losses, color="#0072B2", alpha=0.45, lw=0.8)
-if len(circle_losses) >= 100:
-    circle_smooth = np.convolve(circle_losses, np.ones(100) / 100, mode="valid")
-    axes[3].plot(np.arange(99, len(circle_losses)), circle_smooth, color="#D55E00", lw=2)
-axes[3].set(title="Circle training loss", xlabel="optimization step", ylabel="MSE")
-axes[3].grid(alpha=0.2)
-for ax in axes[:3]:
-    ax.set(aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.5, 4.5))
-    ax.set_xticks([])
-    ax.set_yticks([])
-plt.tight_layout()
-plt.show()
-print(f"circle load/train seconds: {circle_train_seconds:.2f}")
-print(f"circle sampling seconds: {circle_sample_seconds:.2f}")
+circle = run_flow_case(
+    load_or_train_circle_model, sample_noisy_circle,
+    device=device, seed=SEED + 71,
+)
 '''),
         code(r'''
-snapshot_steps = [0, 20, 40, 60, 80]
-circle_plot_indexes = torch.linspace(0, circle_path.shape[1] - 1, 1800).round().long()
-circle_final_colors = generated_angles[circle_plot_indexes.to(device)].cpu()
-
-fig, axes = plt.subplots(1, len(snapshot_steps), figsize=(16, 3.4))
-for ax, step_index in zip(axes, snapshot_steps):
-    points = circle_path[step_index][circle_plot_indexes]
-    ax.scatter(points[:, 0], points[:, 1], c=circle_final_colors, cmap="twilight", s=5, alpha=0.38)
-    if step_index == 80:
-        reference = circle_target[:900].cpu()
-        ax.scatter(reference[:, 0], reference[:, 1], s=7, facecolors="none", edgecolors="#444444", alpha=0.15, linewidths=0.4)
-    ax.set_title(f"t={step_index / 80:.2f}")
-    ax.set(aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.5, 4.5))
-    ax.set_xticks([])
-    ax.set_yticks([])
-fig.suptitle("A deterministic flow forms a continuous ring; color follows final angle", y=1.02)
-plt.tight_layout()
-plt.show()
+plot_circle_flow(circle)
 '''),
         code(r'''
-circle_target_radii = torch.linalg.norm(circle_target, dim=1)
-circle_generated_radii = torch.linalg.norm(circle_generated, dim=1)
-circle_radial_mae = float(torch.mean(torch.abs(circle_generated_radii - CIRCLE_RADIUS)).cpu())
-
-angular_bins = 16
-target_bins = torch.floor(angular_bins * target_angles / (2 * np.pi)).long().clamp_max(angular_bins - 1)
-generated_bins = torch.floor(angular_bins * generated_angles / (2 * np.pi)).long().clamp_max(angular_bins - 1)
-target_occupancy = torch.bincount(target_bins, minlength=angular_bins).float()
-target_occupancy /= target_occupancy.sum()
-generated_occupancy = torch.bincount(generated_bins, minlength=angular_bins).float()
-generated_occupancy /= generated_occupancy.sum()
-circle_angular_tv = float((0.5 * torch.abs(generated_occupancy - target_occupancy).sum()).cpu())
-
-circle_source_wasserstein = wasserstein_distance(circle_x0, circle_target)
-circle_generated_wasserstein = wasserstein_distance(circle_generated, circle_target)
-circle_wasserstein_ratio = circle_generated_wasserstein / circle_source_wasserstein
-
-circle_diagnostics = pd.DataFrame({
-    "diagnostic": [
-        "target mean radius", "generated mean radius", "generated radial MAE",
-        "angular occupancy total variation", "source-to-target Wasserstein distance",
-        "generated-to-target Wasserstein distance", "generated/source distance ratio",
-    ],
-    "value": [
-        float(circle_target_radii.mean().cpu()), float(circle_generated_radii.mean().cpu()),
-        circle_radial_mae, circle_angular_tv, circle_source_wasserstein,
-        circle_generated_wasserstein, circle_wasserstein_ratio,
-    ],
-})
-display(circle_diagnostics.round(4))
+display(pd.DataFrame(circle_flow_metrics(circle)).round(4))
 '''),
         markdown(r'''
 ## 4. Why also inspect eight separated modes?
@@ -593,147 +375,22 @@ trace the same particle backward through stored time slices. The colors are for
 reading the map after sampling; the model never receives them.
 '''),
         code(r'''
-import time
-
-main_checkpoint_digest_before = file_sha256(CHECKPOINT_PATH)
-ring_model, _, _ = load_or_train_eight_gaussian_model(device=device)
-assert file_sha256(CHECKPOINT_PATH) == main_checkpoint_digest_before
-
-set_seed(SEED + 81)
-ring_x0 = sample_base(4096, device=device)
-ring_target_labels = torch.arange(8, device=device).repeat_interleave(512)
-ring_target, ring_target_labels = sample_eight_gaussians(
-    ring_target_labels.numel(), device=device, labels=ring_target_labels
+balanced_labels = torch.arange(8, device=device).repeat_interleave(512)
+eight_modes = run_flow_case(
+    load_or_train_eight_gaussian_model,
+    sample_eight_gaussians,
+    device=device,
+    seed=SEED + 81,
+    sampler_kwargs={"labels": balanced_labels},
 )
-
-fig, axes = plt.subplots(1, 2, figsize=(9, 4.2))
-axes[0].scatter(ring_x0[:, 0].cpu(), ring_x0[:, 1].cpu(), s=5, alpha=0.22, color="#777777")
-axes[0].set_title("Fixed Gaussian source")
-for component in range(8):
-    points = ring_target[ring_target_labels == component].cpu()
-    axes[1].scatter(points[:, 0], points[:, 1], s=6, alpha=0.30, color=EIGHT_GAUSSIAN_COLORS[component])
-axes[1].set_title("Balanced eight-Gaussian target")
-for ax in axes:
-    ax.set(aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.5, 4.5))
-    ax.set_xticks([])
-    ax.set_yticks([])
-plt.tight_layout()
-plt.show()
-
-ring_sample_started = time.perf_counter()
-ring_path = integrate_ode(base_velocity(ring_model), ring_x0, steps=80, method="heun")
-ring_sample_seconds = time.perf_counter() - ring_sample_started
-ring_generated = ring_path[-1].to(device)
-ring_centers = EIGHT_GAUSSIAN_CENTERS.to(device)
-ring_assignments = torch.cdist(ring_generated, ring_centers).argmin(dim=1)
-print(f"eight-mode sampling seconds: {ring_sample_seconds:.3f}")
 '''),
         code(r'''
-snapshot_steps = [0, 20, 40, 60, 80]
-plot_indexes = torch.linspace(0, ring_path.shape[1] - 1, 1600).long()
-plot_assignments = ring_assignments[plot_indexes.to(device)].cpu()
-fig, axes = plt.subplots(1, len(snapshot_steps), figsize=(16, 3.4))
-for ax, step_index in zip(axes, snapshot_steps):
-    for component in range(8):
-        mask = plot_assignments == component
-        points = ring_path[step_index][plot_indexes][mask]
-        ax.scatter(
-            points[:, 0], points[:, 1], s=5, alpha=0.33,
-            color=EIGHT_GAUSSIAN_COLORS[component],
-        )
-        if step_index == 80:
-            reference = ring_target[ring_target_labels == component][:90].detach().cpu()
-            ax.scatter(
-                reference[:, 0], reference[:, 1], s=8, facecolors="none", alpha=0.28,
-                edgecolors=EIGHT_GAUSSIAN_COLORS[component], linewidths=0.5,
-            )
-    ax.set_title(f"t={step_index / 80:.2f}")
-    ax.set_aspect("equal")
-    ax.set_xlim(-4.5, 4.5)
-    ax.set_ylim(-4.5, 4.5)
-    ax.set_xticks([])
-    ax.set_yticks([])
-fig.suptitle("One deterministic learned flow map; color is assigned from the final endpoint", y=1.02)
-plt.tight_layout()
-plt.show()
-
-fig, ax = plt.subplots(figsize=(6.2, 6.0))
-for component in range(8):
-    reference = ring_target[ring_target_labels == component][:120].detach().cpu()
-    ax.scatter(reference[:, 0], reference[:, 1], s=7, alpha=0.10, color=EIGHT_GAUSSIAN_COLORS[component])
-indexes = torch.linspace(0, ring_path.shape[1] - 1, 64).long()
-for index in indexes:
-    index = int(index)
-    component = int(ring_assignments[index].cpu())
-    ax.plot(
-        ring_path[:, index, 0], ring_path[:, index, 1],
-        color=EIGHT_GAUSSIAN_COLORS[component], alpha=0.50, lw=0.9,
-    )
-    ax.scatter(ring_path[0, index, 0], ring_path[0, index, 1], s=17, facecolors="none", edgecolors=EIGHT_GAUSSIAN_COLORS[component], linewidths=0.7)
-    ax.scatter(ring_path[-1, index, 0], ring_path[-1, index, 1], s=12, color=EIGHT_GAUSSIAN_COLORS[component])
-ax.set(title="64 complete trajectories through the learned eight-mode flow", aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.5, 4.5))
-ax.set_xticks([])
-ax.set_yticks([])
-plt.show()
+plot_eight_gaussian_flow(eight_modes)
 '''),
         code(r'''
-generated_counts = torch.bincount(ring_assignments, minlength=8).float()
-generated_fractions = generated_counts / generated_counts.sum()
-target_assignments = torch.cdist(ring_target, ring_centers).argmin(dim=1)
-target_counts = torch.bincount(target_assignments, minlength=8).float()
-target_fractions = target_counts / target_counts.sum()
-
-uniform_fractions = torch.full_like(generated_fractions, 1 / 8)
-occupancy_tv = float((0.5 * torch.abs(generated_fractions - uniform_fractions).sum()).cpu())
-source_wasserstein = wasserstein_distance(ring_x0, ring_target)
-ring_wasserstein = wasserstein_distance(ring_generated, ring_target)
-ring_wasserstein_ratio = ring_wasserstein / source_wasserstein
-covered_modes = int((generated_fractions >= 0.05).sum().cpu())
-
-mode_rows = []
-for component in range(8):
-    generated_mode = ring_generated[ring_assignments == component]
-    target_mode = ring_target[ring_target_labels == component]
-    target_mean = target_mode.mean(dim=0)
-    target_rms = torch.sqrt((target_mode - target_mean).square().sum(dim=1).mean())
-    centroid_error = torch.linalg.norm(generated_mode.mean(dim=0) - target_mean) / target_rms.clamp_min(1e-8)
-    generated_trace = torch.var(generated_mode, dim=0, unbiased=False).sum()
-    target_trace = torch.var(target_mode, dim=0, unbiased=False).sum()
-    mode_rows.append({
-        "mode": component,
-        "generated share": float(generated_fractions[component].cpu()),
-        "target share": float(target_fractions[component].cpu()),
-        "normalized centroid error": float(centroid_error.cpu()),
-        "within-mode trace ratio": float((generated_trace / target_trace).cpu()),
-    })
-mode_table = pd.DataFrame(mode_rows)
-display(mode_table.round(3))
-
-ring_diagnostics = pd.DataFrame({
-    "diagnostic": [
-        "modes with at least 5% generated mass",
-        "occupancy total variation from uniform",
-        "source-to-target Wasserstein distance",
-        "generated-to-target Wasserstein distance",
-        "generated/source Wasserstein distance ratio",
-        "mean normalized centroid error",
-        "median within-mode trace ratio",
-        "all endpoints finite",
-    ],
-    "value": [
-        covered_modes,
-        occupancy_tv,
-        source_wasserstein,
-        ring_wasserstein,
-        ring_wasserstein_ratio,
-        mode_table["normalized centroid error"].mean(),
-        mode_table["within-mode trace ratio"].median(),
-        bool(torch.isfinite(ring_generated).all()),
-    ],
-})
-display(ring_diagnostics.round(4))
-print("generated occupancy:", generated_fractions.cpu().numpy().round(3))
-print("target occupancy:   ", target_fractions.cpu().numpy().round(3))
+eight_summary, per_mode = eight_gaussian_metrics(eight_modes)
+display(pd.DataFrame(per_mode).round(3))
+display(pd.DataFrame(eight_summary).round(4))
 '''),
         markdown(r'''
 The snapshot figure shows **where the learned ODE sends regions of the initial
@@ -824,69 +481,18 @@ visual_xt = forward_noising(visual_clean, visual_t, visual_noise)
 pair_velocity = visual_clean - visual_noise
 with torch.no_grad():
     learned_velocity = model(visual_t, visual_xt)
-    clean_estimate = denoised_from_velocity(visual_xt, visual_t, learned_velocity)
+    clean_estimate = visual_xt + (1 - visual_t[:, None]) * learned_velocity
 
-subset = torch.arange(0, 180, 6, device=device)
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.4))
-for ax in axes:
-    ax.scatter(visual_xt[:, 0].cpu(), visual_xt[:, 1].cpu(), s=8, alpha=0.16, color="#777777")
-    ax.set(aspect="equal", xlim=(-5, 5), ylim=(-5, 5))
-    ax.set_xticks([])
-    ax.set_yticks([])
-
-axes[0].quiver(
-    visual_xt[subset, 0].cpu(), visual_xt[subset, 1].cpu(),
-    pair_velocity[subset, 0].cpu(), pair_velocity[subset, 1].cpu(),
-    angles="xy", scale_units="xy", scale=3.0, width=0.004, color="#D55E00",
+plot_velocity_to_denoiser(
+    visual_xt, pair_velocity, learned_velocity, clean_estimate, visual_clean,
+    t_value=visual_t_value,
 )
-axes[0].set_title("Training target: endpoint pair is known")
-
-axes[1].quiver(
-    visual_xt[subset, 0].cpu(), visual_xt[subset, 1].cpu(),
-    learned_velocity[subset, 0].cpu(), learned_velocity[subset, 1].cpu(),
-    angles="xy", scale_units="xy", scale=3.0, width=0.004, color="#0072B2",
-)
-axes[1].set_title("Learned velocity: only (t, x_t) is known")
-
-for index in subset:
-    estimate_line = torch.stack([visual_xt[index], clean_estimate[index]]).cpu()
-    axes[2].plot(estimate_line[:, 0], estimate_line[:, 1], color="#999999", alpha=0.45, lw=0.8)
-axes[2].scatter(clean_estimate[:, 0].cpu(), clean_estimate[:, 1].cpu(), s=10, alpha=0.35, color="#0072B2", label="D_theta")
-axes[2].scatter(visual_clean[:, 0].cpu(), visual_clean[:, 1].cpu(), s=14, alpha=0.25, facecolors="none", edgecolors="#D55E00", label="paired clean endpoint")
-axes[2].set_title("D_theta = current state + remaining velocity")
-axes[2].legend(frameon=False, fontsize=8, loc="upper left")
-fig.suptitle(f"The velocity-to-denoiser conversion at t={visual_t_value:.2f}", y=1.02)
-plt.tight_layout()
-plt.show()
 '''),
         code(r'''
 set_seed(SEED + 20)
-clean, labels = sample_labeled_mixture(450, device=device)
+clean, _ = sample_labeled_mixture(450, device=device)
 noise = sample_base(clean.shape[0], device=device)
-
-fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
-for ax, t_value in zip(axes, [0.15, 0.45, 0.75]):
-    t = torch.full((clean.shape[0],), t_value, device=device)
-    xt = forward_noising(clean, t, noise)
-    with torch.no_grad():
-        velocity = model(t, xt)
-        denoised = denoised_from_velocity(xt, t, velocity)
-
-    subset = torch.arange(0, clean.shape[0], 15, device=device)
-    ax.scatter(xt[:, 0].cpu(), xt[:, 1].cpu(), s=7, alpha=0.18, color="#777777", label="current state")
-    ax.scatter(denoised[:, 0].cpu(), denoised[:, 1].cpu(), s=8, alpha=0.35, color="#0072B2", label="denoised estimate")
-    arrows = denoised[subset] - xt[subset]
-    ax.quiver(
-        xt[subset, 0].cpu(), xt[subset, 1].cpu(), arrows[:, 0].cpu(), arrows[:, 1].cpu(),
-        angles="xy", scale_units="xy", scale=1, width=0.004, color="#D55E00", alpha=0.8,
-    )
-    ax.set_title(f"Denoiser view at t={t_value:.2f}")
-    ax.set_aspect("equal")
-    ax.set_xlim(-5, 5)
-    ax.set_ylim(-5, 5)
-axes[0].legend(frameon=False, loc="upper left")
-plt.tight_layout()
-plt.show()
+plot_denoiser_times(model, clean, noise)
 '''),
         markdown(r'''
 ## 2. Solver comparison
@@ -903,45 +509,47 @@ We use a 256-step RK4 trajectory as a numerical reference. This reference does
 not remove model error; it only makes solver error small.
 '''),
         code(r'''
+def euler_step(velocity, t, x, dt):
+    return x + dt * velocity(t, x)
+
+def heun_step(velocity, t, x, dt):
+    slope_now = velocity(t, x)
+    predicted = x + dt * slope_now
+    slope_next = velocity(t + dt, predicted)
+    return x + 0.5 * dt * (slope_now + slope_next)
+
+def integrate_with_step(velocity, x0, steps, step_fn):
+    x = x0.detach().clone()
+    path = [x.cpu()]
+    dt = 1.0 / steps
+    for index in range(steps):
+        t = torch.full((len(x),), index * dt, device=x.device)
+        x = step_fn(velocity, t, x, dt).detach()
+        path.append(x.cpu())
+    return torch.stack(path)
+'''),
+        code(r'''
 set_seed(SEED + 21)
 x0 = sample_base(1200, device=device)
 target, _ = sample_labeled_mixture(1200, device=device)
 
-reference_path, reference_seconds = timed_sample(base_velocity(model), x0, steps=256, method="rk4")
-reference_endpoint = reference_path[-1]
-
-rows = []
-saved_paths = {}
-for method in ["euler", "heun", "rk4"]:
+velocity = base_velocity(model)
+reference_path = integrate_ode(velocity, x0, steps=256, method="rk4")
+paths = {}
+for name, step_fn in {"euler": euler_step, "heun": heun_step}.items():
     for steps in [8, 16, 32, 64]:
-        path, seconds = timed_sample(base_velocity(model), x0, steps=steps, method=method)
-        paired_rmse = torch.sqrt(torch.mean((path[-1] - reference_endpoint) ** 2)).item()
-        rows.append({
-            "solver": method,
-            "steps": steps,
-            "model evaluations": steps * {"euler": 1, "heun": 2, "rk4": 4}[method],
-            "paired endpoint RMSE": paired_rmse,
-            "Wasserstein distance to target": wasserstein_distance(path[-1], target.cpu()),
-            "seconds": seconds,
-        })
-        if (method, steps) in {("euler", 8), ("heun", 16), ("rk4", 16)}:
-            saved_paths[f"{method}, {steps} steps"] = path
+        paths[(name, steps)] = integrate_with_step(velocity, x0, steps, step_fn)
+for steps in [8, 16, 32, 64]:
+    paths[("rk4", steps)] = integrate_ode(velocity, x0, steps=steps, method="rk4")
 
+rows, saved_paths = solver_metrics_from_paths(paths, reference_path[-1], target)
 solver_table = pd.DataFrame(rows)
 display(solver_table.round(4))
-print(f"reference RK4 runtime: {reference_seconds:.3f} s")
 '''),
         code(r'''
 plot_trajectory_comparison(saved_paths, n_lines=22)
 plt.show()
-
-fig, ax = plt.subplots(figsize=(7, 4))
-for method, group in solver_table.groupby("solver"):
-    ax.loglog(group["model evaluations"], group["paired endpoint RMSE"], marker="o", label=method)
-ax.set(xlabel="model evaluations", ylabel="paired endpoint RMSE", title="Numerical accuracy at fixed initial noise")
-ax.grid(alpha=0.25, which="both")
-ax.legend(frameon=False)
-plt.show()
+plot_solver_accuracy(solver_table)
 '''),
         markdown(r'''
 ## 3. Two meanings that must remain separate
@@ -993,9 +601,7 @@ a chosen image, centroid, or coordinate.
         code(r'''
 model, losses, _ = load_or_train_model(device=device)
 model.eval()
-for parameter in model.parameters():
-    parameter.requires_grad_(False)
-checkpoint_digest_before = model_state_digest(model)
+model.requires_grad_(False)
 
 set_seed(SEED + 301)
 steering_data, steering_labels = sample_labeled_mixture(30000, device=device)
@@ -1040,6 +646,26 @@ Gaussian denoisers in a generalization regime. The MNIST calculation below is
 our teaching example; Notebook `06` supplies the pretrained image-generator
 experiment for this series.
 '''),
+        code(r'''
+def gaussian_posterior_mean(y, sigma, mean, covariance):
+    """E[x_clean | y] when x_clean is Gaussian and y = x_clean + noise."""
+    sigma = torch.as_tensor(sigma, device=y.device).reshape(-1)
+    if sigma.numel() == 1:
+        sigma = sigma.expand(y.shape[0])
+    identity = torch.eye(y.shape[1], device=y.device).expand(y.shape[0], -1, -1)
+    covariance = covariance.expand(y.shape[0], -1, -1)
+    system = covariance + sigma[:, None, None].square() * identity
+    solved = torch.linalg.solve(system, (y - mean).unsqueeze(-1))
+    return mean + (covariance @ solved).squeeze(-1)
+
+def pca_posterior_mean(y, sigma, stats):
+    centered = y - stats.mean
+    coordinates = centered @ stats.components
+    sigma_squared = torch.as_tensor(sigma, device=y.device).reshape(-1, 1).square()
+    variances = stats.variances[None, :]
+    shrinkage = variances / (variances + sigma_squared)
+    return stats.mean + (coordinates * shrinkage) @ stats.components.T
+'''),
         markdown(r'''
 ## 2. Does a covariance model retain useful image structure?
 
@@ -1077,25 +703,7 @@ print("MNIST digit-3 training images used:", class_fit_indexes.numel())
 print("PCA rank:", MNIST_RANK)
 '''),
         code(r'''
-fig, axes = plt.subplots(2, 6, figsize=(10, 3.8))
-axes[0, 0].imshow(mnist_full_gaussian.mean.reshape(28, 28).cpu(), cmap="gray", vmin=0, vmax=1)
-axes[0, 0].set_title("all-digit mean")
-axes[1, 0].imshow(mnist_class_gaussian.mean.reshape(28, 28).cpu(), cmap="gray", vmin=0, vmax=1)
-axes[1, 0].set_title("digit-3 mean")
-for column in range(1, 6):
-    for row, stats, label in [
-        (0, mnist_full_gaussian, "all"),
-        (1, mnist_class_gaussian, "digit 3"),
-    ]:
-        component = stats.components[:, column - 1].reshape(28, 28).cpu()
-        scale = float(component.abs().max().clamp_min(1e-8))
-        axes[row, column].imshow(component, cmap="RdBu_r", vmin=-scale, vmax=scale)
-        axes[row, column].set_title(f"{label} PC {column}")
-for ax in axes.flat:
-    ax.axis("off")
-fig.suptitle("Means and leading covariance directions learned from MNIST training images", y=1.02)
-plt.tight_layout()
-plt.show()
+plot_pca_components(mnist_full_gaussian, mnist_class_gaussian)
 '''),
         code(r'''
 held_out_pool = torch.where(mnist_test_labels == MNIST_TARGET)[0]
@@ -1103,12 +711,8 @@ held_out_indexes = held_out_pool[:256]
 mnist_clean = mnist_test_images[held_out_indexes]
 set_seed(SEED + 332)
 mnist_noisy = mnist_clean + MNIST_SIGMA * torch.randn_like(mnist_clean)
-mnist_full_denoised = low_rank_gaussian_denoise(
-    mnist_noisy, MNIST_SIGMA, mnist_full_gaussian
-)
-mnist_class_denoised = low_rank_gaussian_denoise(
-    mnist_noisy, MNIST_SIGMA, mnist_class_gaussian
-)
+mnist_full_denoised = pca_posterior_mean(mnist_noisy, MNIST_SIGMA, mnist_full_gaussian)
+mnist_class_denoised = pca_posterior_mean(mnist_noisy, MNIST_SIGMA, mnist_class_gaussian)
 
 def image_mse(images):
     return float(torch.mean((images - mnist_clean).square()).cpu())
@@ -1125,22 +729,12 @@ mnist_metrics = pd.DataFrame({
 })
 display(mnist_metrics.round(4))
 
-display_count = 10
-fig, axes = plt.subplots(4, display_count, figsize=(13, 5.4))
-rows = [
+plot_image_rows([
     ("clean test image", mnist_clean),
     (f"noisy, sigma={MNIST_SIGMA}", mnist_noisy),
     ("all-digit Gaussian", mnist_full_denoised),
     ("digit-3 Gaussian", mnist_class_denoised),
-]
-for row, (label, images) in enumerate(rows):
-    for column in range(display_count):
-        axes[row, column].imshow(images[column].reshape(28, 28).detach().cpu().clamp(0, 1), cmap="gray", vmin=0, vmax=1)
-        axes[row, column].axis("off")
-    axes[row, 0].set_ylabel(label, rotation=0, ha="right", va="center", labelpad=34)
-fig.suptitle("Gaussian/PCA posterior means on held-out digit-3 images", y=1.01)
-plt.tight_layout()
-plt.show()
+], title="Gaussian/PCA posterior means on held-out digit-3 images")
 '''),
         markdown(r'''
 ## 3. How does denoising become a steering signal?
@@ -1156,26 +750,22 @@ grid_1d = torch.linspace(-4.5, 4.5, 19, device=device)
 gx, gy = torch.meshgrid(grid_1d, grid_1d, indexing="xy")
 grid = torch.stack([gx.reshape(-1), gy.reshape(-1)], dim=1)
 t_value = 0.18
-t = torch.full((grid.shape[0],), t_value, device=device)
-delta = noise_alignment_delta(grid, t, TARGET_CLASS, steering_stats)
+t = torch.full((grid.shape[0], 1), t_value, device=device)
+y = grid / t
+sigma = BASE_STD * (1 - t_value) / t_value
 
-gate_times = torch.linspace(0, 1, 300, device=device)
-fig, axes = plt.subplots(1, 2, figsize=(11, 4.8))
-axes[0].plot(gate_times.cpu(), window_gate(gate_times, 0.04, 0.35).cpu(), color="#0072B2", lw=2)
-axes[0].set(xlabel="t: noise to data", ylabel="gate g(t)", title="Correction is active only at high noise")
-axes[0].grid(alpha=0.2)
-axes[1].quiver(
-    grid[:, 0].cpu(), grid[:, 1].cpu(), delta[:, 0].cpu(), delta[:, 1].cpu(),
-    angles="xy", scale_units="xy", scale=1.7, width=0.004, color=CLASS_COLORS[TARGET_CLASS], alpha=0.8,
+D_target = gaussian_posterior_mean(
+    y, sigma, steering_stats.means[TARGET_CLASS], steering_stats.covariances[TARGET_CLASS]
 )
-plot_labeled_points(
-    steering_data[:2500], steering_labels[:2500], ax=axes[1],
-    title=f"D_target - D_full at t={t_value} (clean-estimate coordinates)", alpha=0.18,
+D_full = gaussian_posterior_mean(
+    y, sigma, steering_stats.full_mean, steering_stats.full_covariance
 )
-axes[1].set_xlim(-4.8, 4.8)
-axes[1].set_ylim(-4.8, 4.8)
-plt.tight_layout()
-plt.show()
+denoiser_delta = D_target - D_full
+
+plot_noise_alignment_field(
+    grid, denoiser_delta, steering_data, steering_labels,
+    target_class=TARGET_CLASS, t_value=t_value, start=0.04, end=0.35,
+)
 '''),
         markdown(r'''
 ## 4. Does the correction improve paired samples?
@@ -1185,118 +775,54 @@ reference. The only change is the noise-alignment strength. The correction is
 active for `t in [0.04, 0.35]`, the high-noise part of our noise-to-data path.
 '''),
         code(r'''
+def noise_aligned_velocity(strength):
+    def velocity(t, x):
+        with torch.no_grad():
+            base = model(t, x)
+            t_column = t[:, None].clamp_min(0.04)
+            y = x / t_column
+            sigma = BASE_STD * (1 - t) / t.clamp_min(0.04)
+            target_estimate = gaussian_posterior_mean(
+                y, sigma, steering_stats.means[TARGET_CLASS],
+                steering_stats.covariances[TARGET_CLASS],
+            )
+            full_estimate = gaussian_posterior_mean(
+                y, sigma, steering_stats.full_mean, steering_stats.full_covariance,
+            )
+            gate = window_gate(t, 0.04, 0.35)[:, None]
+            remaining = (1 - t_column).clamp_min(0.04)
+            return base + strength * gate * (target_estimate - full_estimate) / remaining
+    return velocity
+'''),
+        code(r'''
 set_seed(SEED + 30)
 x0 = sample_base(1800, device=device)
+strengths = [0.0, 0.4, 0.8, 1.2, 1.6]
+methods = {"baseline": base_velocity(model)}
+methods.update({f"noise alignment {s:.1f}": noise_aligned_velocity(s) for s in strengths})
 
-methods = {
-    "baseline": base_velocity(model),
-    "noise alignment 0.0": make_noise_aligned_velocity(
-        model, steering_stats, target_class=TARGET_CLASS, strength=0.0, start=0.04, end=0.35
-    ),
-}
-for strength in [0.4, 0.8, 1.2, 1.6]:
-    methods[f"noise alignment {strength:.1f}"] = make_noise_aligned_velocity(
-        model, steering_stats, target_class=TARGET_CLASS, strength=strength, start=0.04, end=0.35
-    )
-
-rows = []
-paths = {}
-for name, velocity in methods.items():
-    path, seconds = timed_sample(velocity, x0, steps=64, method="heun")
-    metrics = evaluate_samples(
-        path[-1].to(device), target_reference, evaluation_stats, target_class=TARGET_CLASS
-    )
-    strength = np.nan if name == "baseline" else float(name.rsplit(" ", 1)[-1])
-    rows.append({"method": name, "strength": strength, **metrics, "seconds": seconds})
-    paths[name] = path
-
+rows, paths = compare_steering_methods(
+    methods, x0, target_reference, evaluation_stats,
+    target_class=TARGET_CLASS, steps=64,
+)
 noise_alignment_table = pd.DataFrame(rows)
-display(noise_alignment_table.round(4))
-
-zero_strength_error = float(torch.max(torch.abs(paths["baseline"][-1] - paths["noise alignment 0.0"][-1])))
-assert zero_strength_error < 1e-6
-assert model_state_digest(model) == checkpoint_digest_before
-'''),
-        code(r'''
-baseline_endpoints = paths["baseline"][-1].to(device)
-aligned_endpoints = paths["noise alignment 1.6"][-1].to(device)
-baseline_classes = predict_classes(baseline_endpoints, evaluation_stats)
-aligned_classes = predict_classes(aligned_endpoints, evaluation_stats)
-
-fig, axes = plt.subplots(1, 3, figsize=(14.5, 4.3))
-for ax, endpoints, predicted, title in [
-    (axes[0], baseline_endpoints, baseline_classes, "Baseline endpoints"),
-    (axes[1], aligned_endpoints, aligned_classes, "Noise alignment, strength 1.6"),
-]:
-    ax.scatter(target_reference[:, 0].cpu(), target_reference[:, 1].cpu(), s=8, alpha=0.12, color="#555555", label="target examples")
-    for class_id, class_name in enumerate(CLASS_NAMES):
-        subset = endpoints[predicted == class_id].cpu()
-        ax.scatter(subset[:, 0], subset[:, 1], s=7, alpha=0.38, color=CLASS_COLORS[class_id], label=class_name)
-    ax.set_title(title)
-    ax.legend(frameon=False, fontsize=8, loc="upper left")
-
-axes[2].scatter(target_reference[:, 0].cpu(), target_reference[:, 1].cpu(), s=8, alpha=0.10, color="#555555")
-paired_indexes = torch.linspace(0, baseline_endpoints.shape[0] - 1, 70).long().to(device)
-starts = baseline_endpoints[paired_indexes]
-changes = aligned_endpoints[paired_indexes] - starts
-axes[2].quiver(
-    starts[:, 0].cpu(), starts[:, 1].cpu(), changes[:, 0].cpu(), changes[:, 1].cpu(),
-    angles="xy", scale_units="xy", scale=1, width=0.004, color="#0072B2", alpha=0.55,
-)
-axes[2].set_title("Paired baseline-to-steered endpoint changes")
-for ax in axes:
-    ax.set(aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.2, 4.5))
-    ax.set_xticks([])
-    ax.set_yticks([])
-plt.tight_layout()
-plt.show()
-
-sweep = noise_alignment_table.dropna(subset=["strength"]).sort_values("strength")
-fig, axes = plt.subplots(1, 4, figsize=(15, 3.6))
-metric_specs = [
-    ("target_rate", "target-class rate (higher)", None),
-    ("target_wasserstein", "Wasserstein distance to target (lower)", None),
-    ("mean_error", "target mean error (lower)", None),
-    ("diversity_ratio", "diversity ratio", 1.0),
+noise_alignment_table["strength"] = [
+    np.nan if name == "baseline" else float(name.rsplit(" ", 1)[-1])
+    for name in noise_alignment_table["method"]
 ]
-for ax, (column, label, ideal) in zip(axes, metric_specs):
-    ax.plot(sweep["strength"], sweep[column], marker="o", color="#0072B2")
-    if ideal is not None:
-        ax.axhline(ideal, color="#777777", ls="--", label="target value")
-        ax.legend(frameon=False, fontsize=8)
-    ax.set(xlabel="noise-alignment strength", ylabel=label)
-    ax.grid(alpha=0.2)
-plt.tight_layout()
-plt.show()
+display(noise_alignment_table.round(4))
 '''),
         code(r'''
-baseline_row = noise_alignment_table.set_index("method").loc["baseline"]
-aligned_row = noise_alignment_table.set_index("method").loc["noise alignment 1.6"]
-
-alignment_evidence = pd.DataFrame({
-    "quantity": [
-        "target-class rate",
-        "Wasserstein distance to target",
-        "target mean error",
-        "diversity ratio",
-    ],
-    "baseline": [
-        baseline_row["target_rate"],
-        baseline_row["target_wasserstein"],
-        baseline_row["mean_error"],
-        baseline_row["diversity_ratio"],
-    ],
-    "noise alignment 1.6": [
-        aligned_row["target_rate"],
-        aligned_row["target_wasserstein"],
-        aligned_row["mean_error"],
-        aligned_row["diversity_ratio"],
-    ],
-})
-alignment_evidence["change"] = (
-    alignment_evidence["noise alignment 1.6"] - alignment_evidence["baseline"]
+plot_noise_alignment_comparison(
+    paths, noise_alignment_table, target_reference, evaluation_stats, strength=1.6,
 )
-display(alignment_evidence.set_index("quantity").round(4))
+'''),
+        code(r'''
+selected = noise_alignment_table.set_index("method").loc[
+    ["baseline", "noise alignment 1.6"],
+    ["target_rate", "target_wasserstein", "mean_error", "diversity_ratio"],
+]
+display(selected.round(4))
 '''),
         markdown(r'''
 ## Reading the paired result
@@ -1356,16 +882,18 @@ class-level objective and changes with the state and time.
 grid_1d = torch.linspace(-4.5, 4.5, 80, device=device)
 gx, gy = torch.meshgrid(grid_1d, grid_1d, indexing="xy")
 grid = torch.stack([gx.reshape(-1), gy.reshape(-1)], dim=1).requires_grad_(True)
-posterior = class_log_probabilities(grid, stats).softmax(dim=1)[:, TARGET_CLASS]
-gradient = torch.autograd.grad(torch.log(posterior.clamp_min(1e-8)).sum(), grid)[0]
+log_posterior = class_log_probabilities(grid, stats).log_softmax(dim=1)[:, TARGET_CLASS]
+posterior = log_posterior.exp()
+gradient = torch.autograd.grad(log_posterior.sum(), grid)[0]
 
 probability_image = posterior.reshape(gx.shape).detach().cpu()
 fig, ax = plt.subplots(figsize=(6.5, 5.5))
 contour = ax.contourf(gx.cpu(), gy.cpu(), probability_image, levels=20, cmap="viridis")
-subset = torch.arange(0, grid.shape[0], 160, device=device)
-direction = gradient[subset] / gradient[subset].norm(dim=1, keepdim=True).clamp_min(1e-6)
+arrow_points = grid.reshape(*gx.shape, 2)[::8, ::8].reshape(-1, 2)
+arrow_gradient = gradient.reshape(*gx.shape, 2)[::8, ::8].reshape(-1, 2)
+direction = arrow_gradient / arrow_gradient.norm(dim=1, keepdim=True).clamp_min(1e-6)
 ax.quiver(
-    grid[subset, 0].detach().cpu(), grid[subset, 1].detach().cpu(),
+    arrow_points[:, 0].detach().cpu(), arrow_points[:, 1].detach().cpu(),
     direction[:, 0].detach().cpu(), direction[:, 1].detach().cpu(),
     color="white", alpha=0.75, scale=18,
 )
@@ -1382,6 +910,24 @@ active over the middle/late window, where the denoised estimate is informative.
 The Gaussian/PCA method is active only at high noise.
 '''),
         code(r'''
+def gradient_guided_velocity(strength):
+    def velocity(t, x):
+        gate = window_gate(t, 0.15, 0.92)[:, None]
+        if gate.max() == 0:
+            return model(t, x).detach()
+
+        x_for_gradient = x.detach().requires_grad_(True)
+        base = model(t, x_for_gradient)
+        clean_estimate = x_for_gradient + (1 - t[:, None]) * base
+        log_prob = class_log_probabilities(clean_estimate, stats).log_softmax(dim=1)
+        objective = log_prob[:, TARGET_CLASS].sum()
+        gradient = torch.autograd.grad(objective, x_for_gradient)[0]
+        direction = gradient / gradient.norm(dim=1, keepdim=True).clamp_min(1e-6)
+        return base.detach() + strength * gate * direction.detach()
+
+    return velocity
+'''),
+        code(r'''
 set_seed(SEED + 40)
 x0 = sample_base(1200, device=device)
 target_reference = sample_class(1200, TARGET_CLASS, device=device)
@@ -1391,22 +937,13 @@ methods = {
     "PCA/Gaussian, forward only": make_noise_aligned_velocity(
         model, stats, target_class=TARGET_CLASS, strength=1.6
     ),
-    "gradient 1.5": make_gradient_guided_velocity(
-        model, stats, target_class=TARGET_CLASS, strength=1.5, start=0.15, end=0.92
-    ),
-    "gradient 3.0": make_gradient_guided_velocity(
-        model, stats, target_class=TARGET_CLASS, strength=3.0, start=0.15, end=0.92
-    ),
+    "gradient 1.5": gradient_guided_velocity(1.5),
+    "gradient 3.0": gradient_guided_velocity(3.0),
 }
 
-rows = []
-paths = {}
-for name, velocity in methods.items():
-    path, seconds = timed_sample(velocity, x0, steps=48, method="heun")
-    metrics = evaluate_samples(path[-1].to(device), target_reference, stats, target_class=TARGET_CLASS)
-    rows.append({"method": name, **metrics, "seconds": seconds})
-    paths[name] = path
-
+rows, paths = compare_steering_methods(
+    methods, x0, target_reference, stats, target_class=TARGET_CLASS, steps=48,
+)
 gradient_table = pd.DataFrame(rows)
 display(gradient_table.round(4))
 '''),
@@ -1474,9 +1011,7 @@ reference_data, reference_labels = sample_labeled_mixture(30000, device=device)
 stats = estimate_gaussian_stats(reference_data, reference_labels)
 TARGET_CLASS = 2
 model.eval()
-for parameter in model.parameters():
-    parameter.requires_grad_(False)
-checkpoint_digest_before = model_state_digest(model)
+_ = model.requires_grad_(False)
 '''),
         markdown(r'''
 ## 1. Why intervene inside the network?
@@ -1498,198 +1033,74 @@ which may change the model's velocity; the ODE sampler then accumulates those
 velocity changes. Model weights stay frozen.
 '''),
         code(r'''
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
-
-def activation_box(ax, xy, width, text, color):
-    patch = FancyBboxPatch(
-        xy, width, 0.18,
-        boxstyle="round,pad=0.018,rounding_size=0.018",
-        facecolor=color, edgecolor="#333333", linewidth=1.1,
-    )
-    ax.add_patch(patch)
-    ax.text(xy[0] + width / 2, xy[1] + 0.09, text, ha="center", va="center", fontsize=9.5)
-
-def activation_arrow(ax, start, end, color="#333333"):
-    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=14, linewidth=1.35, color=color))
-
-fig, ax = plt.subplots(figsize=(12, 4.4))
-ax.set(xlim=(0, 1), ylim=(0, 1))
-ax.axis("off")
-
-ax.text(0.01, 0.80, "Ordinary forward pass", fontsize=11, weight="bold")
-activation_box(ax, (0.03, 0.56), 0.14, "state\n$(t,x_t)$", "#E7E6E6")
-activation_box(ax, (0.25, 0.56), 0.16, "hidden feature\n$h_t$", "#CFE2F3")
-activation_box(ax, (0.51, 0.56), 0.18, "later MLP\nlayers", "#D9EAD3")
-activation_box(ax, (0.79, 0.56), 0.17, "velocity\n$v_\\theta(t,x_t)$", "#EAD1DC")
-activation_arrow(ax, (0.17, 0.65), (0.25, 0.65))
-activation_arrow(ax, (0.41, 0.65), (0.51, 0.65))
-activation_arrow(ax, (0.69, 0.65), (0.79, 0.65))
-
-ax.text(0.01, 0.34, "Steered forward pass", fontsize=11, weight="bold")
-activation_box(ax, (0.03, 0.10), 0.14, "same state\n$(t,x_t)$", "#E7E6E6")
-activation_box(ax, (0.25, 0.10), 0.16, "same hidden\n$h_t$", "#CFE2F3")
-activation_box(ax, (0.48, 0.10), 0.24, "edited feature\n$h'_t=h_t+\\alpha g(t)\\,\\mathrm{RMS}(h_t)d_{0.90}$", "#FCE5CD")
-activation_box(ax, (0.79, 0.10), 0.17, "changed\nvelocity", "#EAD1DC")
-activation_arrow(ax, (0.17, 0.19), (0.25, 0.19))
-activation_arrow(ax, (0.41, 0.19), (0.48, 0.19))
-activation_arrow(ax, (0.72, 0.19), (0.79, 0.19))
-ax.text(0.60, 0.41, "learned direction $d_{0.90}$", ha="center", fontsize=9.5, color="#D55E00")
-activation_arrow(ax, (0.60, 0.39), (0.60, 0.29), color="#D55E00")
-
-fig.suptitle("Activation steering edits a hidden feature, not the sample position", fontsize=14, y=0.98)
-plt.tight_layout()
-plt.show()
+plot_activation_pipeline()
 '''),
         markdown(r'''
 ## 2. When is class information visible in the hidden layer?
 
 At each time, we record activations from separate balanced training and test
 sets with independent noise. A linear probe is fitted only on the training
-activations and scored on the untouched test activations. Shuffled-label probes
-show how much apparent accuracy can arise without the true class relationship.
+activations and scored on the untouched test activations. A shuffled-label
+probe provides a simple comparison without the true class relationship.
 The comparison asks whether class is readable from the hidden state; it does
 not yet show that editing the state will control generation.
 '''),
         code(r'''
-def wilson_interval(successes, total, z=1.96):
-    proportion = successes / total
-    denominator = 1 + z**2 / total
-    center = (proportion + z**2 / (2 * total)) / denominator
-    radius = z * np.sqrt(proportion * (1 - proportion) / total + z**2 / (4 * total**2)) / denominator
-    return center - radius, center + radius
-
-probe_rows = []
-directions = {}
-probes = {}
-feature_sets = {}
-for time_index, t_value in enumerate([0.10, 0.25, 0.40, 0.55, 0.70, 0.85, 0.90]):
-    set_seed(SEED + 500 + 2 * time_index)
-    train_features, train_labels = collect_forward_activations(
-        model, t_value=t_value, n_per_class=600
+def collect_activations(model, *, t_value, n_per_class):
+    labels = torch.arange(len(CLASS_NAMES), device=device).repeat_interleave(n_per_class)
+    x_data, labels = sample_labeled_mixture(
+        len(labels), device=device, labels=labels,
     )
-    set_seed(SEED + 501 + 2 * time_index)
-    test_features, test_labels = collect_forward_activations(
-        model, t_value=t_value, n_per_class=400
-    )
-
-    probe = fit_linear_probe(train_features, train_labels)
-    train_accuracy = (probe.predict(train_features) == train_labels).float().mean().item()
-    test_predictions = probe.predict(test_features)
-    test_successes = int((test_predictions == test_labels).sum().item())
-    test_accuracy = test_successes / test_labels.numel()
-    interval_low, interval_high = wilson_interval(test_successes, test_labels.numel())
-
-    shuffled_accuracies = []
-    for null_index in range(20):
-        set_seed(SEED + 2000 + 100 * time_index + null_index)
-        shuffled_labels = train_labels[torch.randperm(train_labels.numel(), device=device)]
-        shuffled_probe = fit_linear_probe(train_features, shuffled_labels)
-        shuffled_accuracy = (
-            shuffled_probe.predict(test_features) == test_labels
-        ).float().mean().item()
-        shuffled_accuracies.append(shuffled_accuracy)
-
-    direction = discriminant_direction(train_features, train_labels, TARGET_CLASS)
-    directions[t_value] = direction
-    probes[t_value] = probe
-    feature_sets[t_value] = (train_features, train_labels, test_features, test_labels)
-    probe_rows.append({
-        "t": t_value,
-        "effective noise std": BASE_STD * (1-t_value) / t_value,
-        "training accuracy": train_accuracy,
-        "held-out accuracy": test_accuracy,
-        "95% interval low": interval_low,
-        "95% interval high": interval_high,
-        "shuffled mean": float(np.mean(shuffled_accuracies)),
-        "shuffled std": float(np.std(shuffled_accuracies)),
-        "shuffled 95th percentile": float(np.quantile(shuffled_accuracies, 0.95)),
-        "shuffled max": float(np.max(shuffled_accuracies)),
-    })
-
-probe_table = pd.DataFrame(probe_rows)
-display(probe_table.round(3))
-
-fig, ax = plt.subplots(figsize=(7, 3.8))
-lower_error = np.maximum(
-    0.0, probe_table["held-out accuracy"] - probe_table["95% interval low"]
-)
-upper_error = np.maximum(
-    0.0, probe_table["95% interval high"] - probe_table["held-out accuracy"]
-)
-ax.errorbar(
-    probe_table["t"], probe_table["held-out accuracy"],
-    yerr=np.vstack([lower_error, upper_error]), marker="o", capsize=3,
-    color="#0072B2", label="held-out true-label probe",
-)
-ax.plot(probe_table["t"], probe_table["shuffled mean"], color="#D55E00", label="20 shuffled-label probes")
-ax.fill_between(
-    probe_table["t"],
-    probe_table["shuffled mean"] - probe_table["shuffled std"],
-    probe_table["shuffled mean"] + probe_table["shuffled std"],
-    color="#D55E00", alpha=0.18,
-)
-ax.axhline(1 / len(CLASS_NAMES), color="#777777", ls="--", label="chance")
-ax.set(xlabel="t (noise -> data)", ylabel="held-out accuracy", ylim=(0.25, 1.02), title="Class information across time")
-ax.annotate("near chance", (0.10, probe_table.loc[0, "held-out accuracy"]), xytext=(8, 14), textcoords="offset points")
-ax.grid(alpha=0.2)
-ax.legend(frameon=False)
-plt.show()
+    x_noise = sample_base(len(labels), device=device)
+    t = torch.full((len(labels),), t_value, device=device)
+    x_t = (1 - t[:, None]) * x_noise + t[:, None] * x_data
+    with torch.no_grad():
+        features = model.features(t, x_t)
+    return features, labels
 '''),
         code(r'''
-# Fit display PCA only on training activations, then transform held-out activations.
 REFERENCE_T = 0.90
-train_features, train_labels, test_features, test_labels = feature_sets[REFERENCE_T]
+set_seed(SEED + 500)
+train_features, train_labels = collect_activations(
+    model, t_value=REFERENCE_T, n_per_class=600,
+)
+set_seed(SEED + 501)
+test_features, test_labels = collect_activations(
+    model, t_value=REFERENCE_T, n_per_class=400,
+)
+
+probe = fit_linear_probe(train_features, train_labels)
+probe_accuracy = (probe.predict(test_features) == test_labels).float().mean()
+
+positive = train_features[train_labels == TARGET_CLASS]
+negative = train_features[train_labels != TARGET_CLASS]
+mean_difference = positive.mean(0) - negative.mean(0)
+centered = train_features - train_features.mean(0)
+covariance = centered.T @ centered / (len(centered) - 1)
+ridge = 0.1 * torch.eye(covariance.shape[0], device=device)
+reference_direction = torch.linalg.solve(covariance + ridge, mean_difference)
+reference_direction /= reference_direction.norm()
+
+shuffled_labels = train_labels[torch.randperm(len(train_labels), device=device)]
+shuffled_probe = fit_linear_probe(train_features, shuffled_labels)
+shuffled_accuracy = (shuffled_probe.predict(test_features) == test_labels).float().mean()
+shuffled_direction = discriminant_direction(train_features, shuffled_labels, TARGET_CLASS)
+
+display(pd.Series({
+    "held-out probe accuracy": float(probe_accuracy),
+    "shuffled-label accuracy": float(shuffled_accuracy),
+}, name=f"t={REFERENCE_T}").round(3))
+'''),
+        code(r'''
 pca_display = fit_pca_projection(train_features)
 projected_test = pca_display.transform(test_features)
 
 fig, ax = plt.subplots(figsize=(6, 5))
 plot_labeled_points(
     projected_test, test_labels, ax=ax,
-    title=f"Held-out activations in train-fit PCA coordinates at t={REFERENCE_T}", alpha=0.35,
+    title=f"Held-out activations at t={REFERENCE_T}", alpha=0.35,
 )
 ax.legend(frameon=False)
-plt.show()
-
-reference_predictions = probes[REFERENCE_T].predict(test_features)
-confusion = torch.bincount(
-    test_labels * len(CLASS_NAMES) + reference_predictions,
-    minlength=len(CLASS_NAMES) ** 2,
-).reshape(len(CLASS_NAMES), len(CLASS_NAMES)).float()
-confusion_fraction = confusion / confusion.sum(dim=1, keepdim=True).clamp_min(1)
-
-fig, ax = plt.subplots(figsize=(5.2, 4.4))
-image = ax.imshow(confusion_fraction.cpu(), vmin=0, vmax=1, cmap="Blues")
-for row in range(len(CLASS_NAMES)):
-    for column in range(len(CLASS_NAMES)):
-        value = float(confusion_fraction[row, column].cpu())
-        ax.text(column, row, f"{value:.2f}", ha="center", va="center", color="white" if value > 0.55 else "black")
-ax.set_xticks(range(len(CLASS_NAMES)), CLASS_NAMES)
-ax.set_yticks(range(len(CLASS_NAMES)), CLASS_NAMES)
-ax.set(xlabel="predicted class", ylabel="true class", title=f"Held-out probe confusion at t={REFERENCE_T}")
-fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
-plt.tight_layout()
-plt.show()
-
-reference_direction = directions[REFERENCE_T]
-cosine_table = pd.DataFrame([
-    {"t": t_value, f"cosine with t={REFERENCE_T:.2f} direction": float(torch.dot(direction, reference_direction).cpu())}
-    for t_value, direction in directions.items()
-])
-display(cosine_table.round(3))
-
-cosine_column = f"cosine with t={REFERENCE_T:.2f} direction"
-fig, ax = plt.subplots(figsize=(7.2, 3.9))
-ax.plot(cosine_table["t"], cosine_table[cosine_column], marker="o", lw=2, color="#0072B2")
-ax.axhline(0, color="#777777", lw=1, ls="--")
-ax.axvspan(0.40, 0.90, color="#E69F00", alpha=0.16, label="activation-only window")
-ax.scatter([REFERENCE_T], [1.0], s=90, color="#D55E00", zorder=3, label="$d_{0.90}$ reference")
-ax.set(
-    xlabel="t (noise to data)", ylabel="cosine similarity",
-    title="A late activation direction is not the local direction at every time",
-    xlim=(0.05, 0.95), ylim=(-0.35, 1.08),
-)
-ax.grid(alpha=0.2)
-ax.legend(frameon=False, loc="lower right")
 plt.show()
 '''),
         markdown(r'''
@@ -1703,61 +1114,18 @@ at every time. It asks a narrower question: can one late-time direction,
 repeated over part of the trajectory, produce a useful endpoint change?
 '''),
         code(r'''
-def direction_statistics(direction):
-    scores = test_features @ direction
-    positive = scores[test_labels == TARGET_CLASS]
-    negative = scores[test_labels != TARGET_CLASS]
-    gap = positive.mean() - negative.mean()
-    pooled_std = torch.sqrt(0.5 * (positive.var(unbiased=False) + negative.var(unbiased=False))).clamp_min(1e-8)
-    order = torch.argsort(scores)
-    ranks = torch.empty_like(order, dtype=torch.float32)
-    ranks[order] = torch.arange(1, scores.numel() + 1, device=device, dtype=torch.float32)
-    n_positive = positive.numel()
-    n_negative = negative.numel()
-    auc = (
-        ranks[test_labels == TARGET_CLASS].sum() - n_positive * (n_positive + 1) / 2
-    ) / (n_positive * n_negative)
-    return float(gap.cpu()), float((gap / pooled_std).cpu()), float(auc.cpu())
-
-shuffled_directions = []
-null_direction_rows = []
-for null_index in range(50):
-    set_seed(SEED + 4000 + null_index)
-    shuffled_train_labels = train_labels[torch.randperm(train_labels.numel(), device=device)]
-    direction = discriminant_direction(train_features, shuffled_train_labels, TARGET_CLASS)
-    shuffled_directions.append(direction)
-    raw_gap, normalized_gap, auc = direction_statistics(direction)
-    null_direction_rows.append({
-        "shuffle": null_index,
-        "held-out raw gap": raw_gap,
-        "held-out normalized gap": normalized_gap,
-        "held-out AUC": auc,
-    })
-
-shuffled_direction = shuffled_directions[0]
-true_raw_gap, true_normalized_gap, true_auc = direction_statistics(reference_direction)
-null_direction_table = pd.DataFrame(null_direction_rows)
-direction_summary = pd.DataFrame({
-    "direction": ["true labels", "50 shuffled-label mean", "largest shuffled-label gap"],
-    "normalized held-out gap": [
-        true_normalized_gap,
-        null_direction_table["held-out normalized gap"].mean(),
-        null_direction_table["held-out normalized gap"].max(),
-    ],
-    "held-out AUC": [
-        true_auc,
-        null_direction_table["held-out AUC"].mean(),
-        null_direction_table.loc[null_direction_table["held-out normalized gap"].idxmax(), "held-out AUC"],
-    ],
-})
-display(direction_summary.round(3))
-
-fig, ax = plt.subplots(figsize=(7, 3.8))
-ax.hist(null_direction_table["held-out normalized gap"], bins=12, color="#999999", alpha=0.75, label="50 shuffled-label directions")
-ax.axvline(true_normalized_gap, color="#D55E00", lw=2.5, label="true-label direction")
-ax.set(xlabel="normalized target-vs-rest gap on held-out activations", ylabel="count", title="Direction null distribution")
-ax.legend(frameon=False)
-plt.show()
+probe_rows, directions = activation_probe_sweep(
+    model,
+    target_class=TARGET_CLASS,
+    times=[0.10, 0.25, 0.40, 0.55, 0.70, 0.85, 0.90],
+    seed=SEED + 700,
+    collect=collect_activations,
+)
+probe_table = pd.DataFrame(probe_rows)
+display(probe_table.round(3))
+plot_activation_probe_sweep(
+    probe_table, directions, reference_direction, reference_t=REFERENCE_T,
+)
 '''),
         markdown(r'''
 ## 3. Activation intervention
@@ -1779,6 +1147,20 @@ late direction is not the local class direction at every step. The paired
 comparison below asks whether this fixed edit is nevertheless useful.
 '''),
         code(r'''
+def activation_velocity(direction, strength, start, end):
+    direction = direction / direction.norm()
+
+    def velocity(t, x):
+        gate = window_gate(t, start, end)[:, None]
+        with torch.no_grad():
+            hidden = model.features(t, x)
+            feature_scale = hidden.square().mean(dim=1, keepdim=True).sqrt()
+            edited = hidden + strength * gate * feature_scale * direction[None, :]
+            return model.velocity_from_features(edited)
+
+    return velocity
+'''),
+        code(r'''
 set_seed(SEED + 50)
 x0 = sample_base(1400, device=device)
 target_reference = sample_class(1400, TARGET_CLASS, device=device)
@@ -1787,20 +1169,16 @@ ACTIVATION_STRENGTH = 7.0
 ACTIVATION_WINDOW = (0.40, 0.90)
 COMBINED_ACTIVATION_STRENGTH = 5.0
 COMBINED_ACTIVATION_WINDOW = (0.35, 0.85)
-
+'''),
+        code(r'''
 methods = {
     "baseline": base_velocity(model),
-    "activation 0.0": make_activation_steered_velocity(
-        model, reference_direction, strength=0.0,
-        start=ACTIVATION_WINDOW[0], end=ACTIVATION_WINDOW[1],
+    "activation 0.0": activation_velocity(reference_direction, 0.0, *ACTIVATION_WINDOW),
+    "shuffled activation": activation_velocity(
+        shuffled_direction, ACTIVATION_STRENGTH, *ACTIVATION_WINDOW,
     ),
-    "shuffled activation": make_activation_steered_velocity(
-        model, shuffled_direction, strength=ACTIVATION_STRENGTH,
-        start=ACTIVATION_WINDOW[0], end=ACTIVATION_WINDOW[1],
-    ),
-    "activation steering": make_activation_steered_velocity(
-        model, reference_direction, strength=ACTIVATION_STRENGTH,
-        start=ACTIVATION_WINDOW[0], end=ACTIVATION_WINDOW[1],
+    "activation steering": activation_velocity(
+        reference_direction, ACTIVATION_STRENGTH, *ACTIVATION_WINDOW,
     ),
     "noise alignment": make_noise_aligned_velocity(
         model, stats, target_class=TARGET_CLASS, strength=1.6
@@ -1808,36 +1186,25 @@ methods = {
     "gradient guidance": make_gradient_guided_velocity(
         model, stats, target_class=TARGET_CLASS, strength=3.0, start=0.15, end=0.92
     ),
-    "noise + activation": make_combined_velocity(
-        model, stats, reference_direction,
-        target_class=TARGET_CLASS, noise_strength=1.6,
-        activation_strength=COMBINED_ACTIVATION_STRENGTH,
-        activation_window=COMBINED_ACTIVATION_WINDOW,
+    "noise + activation": add_noise_alignment(
+        activation_velocity(
+            reference_direction,
+            COMBINED_ACTIVATION_STRENGTH,
+            *COMBINED_ACTIVATION_WINDOW,
+        ),
+        stats,
+        target_class=TARGET_CLASS,
+        strength=1.6,
     ),
 }
-
-rows = []
-paths = {}
-for name, velocity in methods.items():
-    path, seconds = timed_sample(velocity, x0, steps=56, method="heun")
-    metrics = evaluate_samples(path[-1].to(device), target_reference, stats, target_class=TARGET_CLASS)
-    rows.append({"method": name, **metrics, "seconds": seconds})
-    paths[name] = path
-
+'''),
+        code(r'''
+rows, paths = compare_steering_methods(
+    methods, x0, target_reference, stats, target_class=TARGET_CLASS, steps=56,
+)
 comparison_table = pd.DataFrame(rows)
 comparison_table["runtime / baseline"] = comparison_table["seconds"] / comparison_table.loc[0, "seconds"]
-zero_activation_error = float(torch.max(torch.abs(paths["baseline"][-1] - paths["activation 0.0"][-1])))
-assert zero_activation_error < 1e-6
-assert model_state_digest(model) == checkpoint_digest_before
-
-null_control_table = comparison_table[
-    comparison_table["method"].isin(["baseline", "activation 0.0", "shuffled activation", "activation steering"])
-]
-method_table = comparison_table[
-    comparison_table["method"].isin(["baseline", "noise alignment", "gradient guidance", "activation steering", "noise + activation"])
-]
-display(null_control_table.round(4))
-display(method_table.round(4))
+display(comparison_table.round(4))
 '''),
         code(r'''
 plot_trajectory_comparison(
@@ -1851,51 +1218,16 @@ plot_trajectory_comparison(
     n_lines=18,
 )
 plt.show()
-
-fig, ax = plt.subplots(figsize=(7.5, 5))
-marker_by_method = {
-    "baseline": "o", "shuffled activation": "s",
-    "activation steering": "D", "noise alignment": "^", "gradient guidance": "v",
-    "noise + activation": "P",
-}
-label_offsets = {
-    "baseline": (-52, -12),
-    "shuffled activation": (5, 8),
-    "activation steering": (5, 4),
-    "noise alignment": (5, 4),
-    "gradient guidance": (5, 4),
-    "noise + activation": (5, -2),
-}
-tradeoff_table = comparison_table[comparison_table["method"] != "activation 0.0"]
-for _, row in tradeoff_table.iterrows():
-    ax.scatter(row["target_wasserstein"], row["target_rate"], s=80, marker=marker_by_method[row["method"]])
-    ax.annotate(
-        row["method"], (row["target_wasserstein"], row["target_rate"]),
-        xytext=label_offsets[row["method"]], textcoords="offset points", fontsize=9,
-    )
-ax.set(xlabel="Wasserstein distance to target class (lower is better)", ylabel="target-class rate (higher is better)", title="Control-quality trade-off")
-ax.grid(alpha=0.2)
-plt.show()
+plot_method_tradeoff(comparison_table)
 '''),
         code(r'''
 method_rows = comparison_table.set_index("method")
-activation_gain = method_rows.loc["activation steering", "target_rate"] - method_rows.loc["baseline", "target_rate"]
-shuffled_gain = method_rows.loc["shuffled activation", "target_rate"] - method_rows.loc["baseline", "target_rate"]
-activation_wasserstein_reduction = method_rows.loc["baseline", "target_wasserstein"] - method_rows.loc["activation steering", "target_wasserstein"]
-
-activation_effects = pd.DataFrame({
-    "comparison": [
-        "activation steering minus baseline",
-        "shuffled activation minus baseline",
-        "activation steering: Wasserstein reduction",
-    ],
-    "observed change": [
-        activation_gain,
-        shuffled_gain,
-        activation_wasserstein_reduction,
-    ],
+activation_effects = pd.Series({
+    "activation target-rate gain": method_rows.loc["activation steering", "target_rate"] - method_rows.loc["baseline", "target_rate"],
+    "shuffled-direction gain": method_rows.loc["shuffled activation", "target_rate"] - method_rows.loc["baseline", "target_rate"],
+    "activation Wasserstein reduction": method_rows.loc["baseline", "target_wasserstein"] - method_rows.loc["activation steering", "target_wasserstein"],
 })
-display(activation_effects.set_index("comparison").round(4))
+display(activation_effects.round(4))
 '''),
         markdown(r'''
 ## 4. Reading the method comparison

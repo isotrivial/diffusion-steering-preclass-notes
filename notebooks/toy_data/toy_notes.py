@@ -258,6 +258,10 @@ class VelocityMLP(nn.Module):
         h = F.silu(self.input(self._time_features(t, x)))
         return F.silu(self.hidden1(h))
 
+    def velocity_from_features(self, features: torch.Tensor) -> torch.Tensor:
+        """Continue the forward pass from the inspectable hidden layer."""
+        return self.output(F.silu(self.hidden2(features)))
+
     def forward(
         self,
         t: torch.Tensor,
@@ -273,8 +277,7 @@ class VelocityMLP(nn.Module):
             strength = expand_time(feature_strength, h)
             rms = h.square().mean(dim=1, keepdim=True).sqrt().detach()
             h = h + strength * rms * direction.reshape(1, -1)
-        h = F.silu(self.hidden2(h))
-        return self.output(h)
+        return self.velocity_from_features(h)
 
 
 def train_flow_model(
@@ -334,6 +337,7 @@ def load_or_train_model(
     steps: Optional[int] = None,
     force_retrain: bool = False,
     checkpoint_path: Path = CHECKPOINT_PATH,
+    trainer: Optional[Callable[[VelocityMLP, int], list[float]]] = None,
 ) -> Tuple[VelocityMLP, list[float], bool]:
     """Load the shared checkpoint, or train it when a notebook is run alone."""
     device = device or choose_device()
@@ -348,7 +352,7 @@ def load_or_train_model(
     if steps is None:
         steps = int(os.environ.get("TOY_NOTES_TRAIN_STEPS", "2500"))
     model = VelocityMLP().to(device)
-    losses = train_flow_model(model, steps=steps)
+    losses = trainer(model, steps) if trainer is not None else train_flow_model(model, steps=steps)
     save_checkpoint(model, losses, checkpoint_path)
     return model, losses, True
 
@@ -675,18 +679,36 @@ def make_noise_aligned_velocity(
     start: float = 0.04,
     end: float = 0.35,
 ) -> VelocityFunction:
-    stats = stats.to(next(model.parameters()).device)
+    return add_noise_alignment(
+        base_velocity(model),
+        stats,
+        target_class=target_class,
+        strength=strength,
+        start=start,
+        end=end,
+    )
 
-    def velocity(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+
+def add_noise_alignment(
+    base_velocity_fn: VelocityFunction,
+    stats: GaussianStats,
+    *,
+    target_class: int,
+    strength: float = 1.0,
+    start: float = 0.04,
+    end: float = 0.35,
+) -> VelocityFunction:
+    """Apply noise alignment to any base velocity function."""
+    def guided_velocity(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
-            v = model(t, x)
+            v = base_velocity_fn(t, x)
             gate = window_gate(t, start, end).reshape(-1, 1)
             remaining = (1.0 - expand_time(t, x)).clamp_min(0.04)
-            clean_delta = noise_alignment_delta(x, t, target_class, stats)
+            clean_delta = noise_alignment_delta(x, t, target_class, stats.to(x.device))
             velocity_delta = float(strength) * gate * clean_delta / remaining
             return v + velocity_delta
 
-    return velocity
+    return guided_velocity
 
 
 def class_log_probabilities(x: torch.Tensor, stats: GaussianStats) -> torch.Tensor:

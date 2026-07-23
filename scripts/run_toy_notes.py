@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 import time
@@ -23,6 +24,14 @@ NOTEBOOKS = [
     "05_activation_steering_and_method_comparison.ipynb",
 ]
 
+INLINE_MATPLOTLIB_BOOTSTRAP = """
+from IPython import get_ipython as _get_ipython
+_ipython = _get_ipython()
+if _ipython is not None:
+    _ipython.run_line_magic("matplotlib", "inline")
+del _ipython, _get_ipython
+""".strip()
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -33,6 +42,25 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--keep-going", action="store_true")
     return parser.parse_args()
+
+
+@contextmanager
+def inline_matplotlib(notebook):
+    """Enable inline plots without adding execution plumbing to the saved notebook."""
+    setup_cell = next(
+        (cell for cell in notebook.cells if cell.get("cell_type") == "code"),
+        None,
+    )
+    if setup_cell is None:
+        yield
+        return
+
+    original_source = setup_cell.source
+    setup_cell.source = f"{INLINE_MATPLOTLIB_BOOTSTRAP}\n\n{original_source}"
+    try:
+        yield
+    finally:
+        setup_cell.source = original_source
 
 
 def main() -> int:
@@ -72,7 +100,8 @@ def main() -> int:
                 resources={"metadata": {"path": str(NOTES_DIR)}},
                 allow_errors=False,
             )
-            client.execute()
+            with inline_matplotlib(notebook):
+                client.execute()
             with executed_path.open("w", encoding="utf-8") as handle:
                 nbformat.write(notebook, handle)
             record["status"] = "passed"

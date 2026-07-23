@@ -10,6 +10,8 @@ import time
 import traceback
 from pathlib import Path
 
+from run_toy_notes import inline_matplotlib
+
 
 ROOT = Path(__file__).resolve().parents[1]
 OPTIONAL_DIR = ROOT / "notebooks" / "toy_data" / "optional"
@@ -41,13 +43,14 @@ def main() -> int:
     started = time.perf_counter()
     notebook = nbformat.read(SOURCE, as_version=4)
     try:
-        NotebookClient(
-            notebook,
-            timeout=args.timeout,
-            kernel_name=args.kernel_name,
-            resources={"metadata": {"path": str(OPTIONAL_DIR)}},
-            allow_errors=False,
-        ).execute()
+        with inline_matplotlib(notebook):
+            NotebookClient(
+                notebook,
+                timeout=args.timeout,
+                kernel_name=args.kernel_name,
+                resources={"metadata": {"path": str(OPTIONAL_DIR)}},
+                allow_errors=False,
+            ).execute()
         record["status"] = "passed"
         exit_code = 0
     except Exception as exc:

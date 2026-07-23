@@ -66,6 +66,13 @@ def test_zero_strength_executes_correction_path_without_changing_endpoint(tmp_pa
         start_step=0,
         end_step=2,
     )
+
+    combiner_calls = []
+
+    def recording_combiner(network_estimate, class_estimate, full_estimate, strength):
+        combiner_calls.append(float(strength))
+        return network_estimate + strength * (class_estimate - full_estimate)
+
     steered, _ = edm_heun_sample(
         network,
         latents,
@@ -75,7 +82,9 @@ def test_zero_strength_executes_correction_path_without_changing_endpoint(tmp_pa
         strength=0.5,
         start_step=0,
         end_step=2,
+        denoiser_combiner=recording_combiner,
     )
 
     assert torch.equal(baseline, zero)
     assert not torch.equal(baseline, steered)
+    assert combiner_calls

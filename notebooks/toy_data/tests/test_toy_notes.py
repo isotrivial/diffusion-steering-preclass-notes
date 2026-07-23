@@ -105,6 +105,15 @@ def test_velocity_to_denoiser_identity_for_exact_pair():
     assert torch.allclose(recovered, x_data, atol=1e-6)
 
 
+def test_velocity_from_features_matches_ordinary_forward():
+    torch.manual_seed(18)
+    model = VelocityMLP(hidden_dim=24)
+    x = torch.randn(30, 2)
+    t = torch.rand(30)
+    continued = model.velocity_from_features(model.features(t, x))
+    assert torch.equal(continued, model(t, x))
+
+
 def test_additive_coordinates_include_base_scale():
     torch.manual_seed(12)
     clean = torch.randn(20, 2)

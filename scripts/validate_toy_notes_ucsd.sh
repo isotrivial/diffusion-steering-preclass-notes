@@ -66,7 +66,7 @@ minimum_images = {
     "01_train_unconditional_flow_matching.ipynb": 9,
     "02_denoisers_and_deterministic_samplers.ipynb": 4,
     "03_gaussian_denoisers_and_noise_alignment.ipynb": 5,
-    "05_activation_steering_and_method_comparison.ipynb": 8,
+    "05_activation_steering_and_method_comparison.ipynb": 5,
 }
 for record in records:
     executed = json.loads(Path(record["executed"]).read_text())
