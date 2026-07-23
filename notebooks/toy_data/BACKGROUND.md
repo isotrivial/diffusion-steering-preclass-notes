@@ -231,7 +231,7 @@ A successful linear probe shows that class information is readable from `h`;
 it does not by itself show that moving along the probe-related direction will
 control generation.
 
-The notebooks check three empirical requirements instead of assuming them:
+Three questions keep readability and control separate:
 
 1. a linear probe can decode class from the feature;
 2. direction alignment is measured rather than assumed across time;
@@ -261,7 +261,7 @@ It reports the mean length of the matched pairs. This is a finite-sample
 empirical estimate: lower is better, but separate coverage and spread checks
 can still reveal failures hidden by one scalar summary.
 
-## 10. Scope boundary
+## 10. From the toy mechanisms to the image experiment
 
 The toy model is not a U-Net, image diffusion model, or implementation of the
 full NA-RFM pipeline. It does implement the following mechanisms in a setting
@@ -274,7 +274,19 @@ where every state and vector is visible:
 - paired ablations over timing, strength, quality, diversity, and runtime.
 
 Notebook `03` already moves the Gaussian denoiser to MNIST pixels, and the
-CIFAR-10 image experiment uses a real pretrained EDM denoiser with
+Notebook `06` image experiment uses a real pretrained EDM denoiser with
 high-dimensional PCA statistics. Activation steering of an image U-Net still
 requires a specified layer, activation tensors, held-out probes, matched
 controls, stronger quality metrics, and broader validation.
+
+| Idea | Toy realization | What changes at image scale |
+|---|---|---|
+| High-noise noise alignment | target-class Gaussian denoiser minus full-data Gaussian denoiser | Notebook `06` uses low-rank PCA statistics over CIFAR-10 images |
+| Objective-gradient guidance | differentiate a class score through the 2D denoised estimate | a larger model would require an image-level objective and online backpropagation |
+| Activation collection | record one MLP hidden layer on labeled, noised points | an image experiment must choose a particular network block and tensor representation |
+| Activation direction | covariance-aware target-versus-rest direction | full NA-RFM uses a richer feature-learning construction |
+| Online activation edit | add one fixed direction over a time window | image tensors require a defined broadcast, normalization, and matched control |
+
+The table is a map between ideas, not an equivalence claim. Notebook `06`
+extends only noise alignment to images; the hidden-feature experiment remains a
+separate next step.

@@ -1,22 +1,22 @@
-# Pre-Class Notes: Flow Matching and Post-Hoc Steering
+# Reading Guide: Flow Matching and Post-Hoc Steering
 
-## Purpose
+## One question across the series
 
-These six notebooks and the accompanying CIFAR-10 experiment are preparatory
-notes for undergraduates who may have limited background in differential
-equations, diffusion models, or representation learning. They build visual
-intuition before class discussion.
+These seven notes follow one question: how can a frozen unconditional generator
+be steered without pulling a sample toward a chosen point? The answer requires
+several ideas in order. We first separate the source distribution, learned
+model, and sampler; then train and inspect a flow; then translate velocity into
+a denoised estimate; and only then compare distributional, gradient-based, and
+hidden-feature interventions.
 
-No prior generative-model taxonomy is assumed. Notebook `00` introduces the
-minimum vocabulary visually before using path equations.
+The intended reader may have limited background in differential equations,
+diffusion models, or representation learning. No generative-model taxonomy or
+stochastic calculus is assumed. Each mathematical object is introduced in
+words, equations, and figures before it is used for steering.
 
-The root `README.md` links to output-bearing snapshots for readers who do not
-want to run training first. The notebooks in this directory remain clean,
-output-free source files.
-
-The notebooks use one unconditional flow-matching MLP. Class labels never enter
-its training input. Labels appear later only for evaluation and for constructing
-post-hoc steering signals.
+The toy steering notes use one unconditional flow-matching MLP. Class labels
+never enter its training input. Labels appear later only to fit post-hoc
+signals and to compare their effects.
 
 Notebook `01` also trains separate unlabeled circle and eight-Gaussian models
 to make continuous geometry and multimodal flow maps easy to see. Those
@@ -49,20 +49,22 @@ Training uses data examples to fit the velocity model. Generation starts from
 fresh noise and does not receive a paired clean answer. Different noise seeds
 provide diversity even when the ODE sampler is deterministic.
 
-## Suggested Reading Order
+## Reading path
 
 ### 00: Diffusion and flow-matching foundations
 
 We first need a concrete picture of what turns noise into a sample. This note
 separates the source distribution, learned velocity field, and numerical
-sampler, then draws forward noising and source-to-data paths.
+sampler, then leaves the central unresolved question: can the velocity field
+actually be learned?
 
 ### 01: Unconditional flow-matching training
 
 Training one small model exposes the connection between the flow-matching loss
 and generated samples. A three-component mixture checks familiar modes, a noisy
 circle tests curved continuous support, and eight Gaussians reveal missing-mode
-and occupancy failures.
+and occupancy failures. These visible failures motivate a closer look at what
+the model predicts and how the sampler follows it.
 
 ### 02: Denoisers and deterministic samplers
 
@@ -70,6 +72,8 @@ The next methods are written in denoiser language even though our network
 predicts velocity. This note derives the conditional-expectation meaning of
 `D_theta(x_t,t) = x_t + (1-t)v_theta(x_t,t)`, explains the endpoint caveat,
 and compares Euler, Heun, and RK4 from exactly the same initial noise tensor.
+That paired deterministic setup becomes the common comparison tool for every
+steering method that follows.
 
 ### 03: Gaussian/PCA noise alignment
 
@@ -77,21 +81,31 @@ Before using a Gaussian correction for steering, we test whether low-rank
 covariance structure can denoise held-out MNIST pixels. We then visualize the
 target-class minus full-data denoiser in 2D and apply it only during a
 high-noise window. A zero-strength control separates partial coarse steering
-from full class-conditional generation.
+from full class-conditional generation. Its limitation is equally important:
+means and covariances describe only coarse structure.
 
-### 04: Post-hoc gradient guidance
+### 04: Post-hoc objective-gradient guidance
 
 Covariance guidance is efficient but restrictive. A differentiable class
 objective is more flexible, so this note visualizes its gradient and compares
 its behavior and backward-pass cost with the forward-only Gaussian/PCA
-correction.
+correction. This raises the next question: can useful class information be
+accessed without an online backward pass?
 
 ### 05: Hidden-feature steering and method comparison
 
 The final toy note asks whether a forward-only edit can act inside the frozen
 network. It first measures whether class is readable from held-out hidden
 features, then tests a target-vs-rest direction against shuffled controls and
-compares activation steering with noise alignment and gradient guidance.
+compares activation steering with noise alignment and objective-gradient
+guidance.
+
+### 06: Noise alignment in an unconditional CIFAR-10 EDM
+
+The final note carries the high-noise class-minus-full PCA correction to
+NVIDIA's pretrained unconditional CIFAR-10 EDM. Paired images show how an early
+change can alter a late sample, while target preference, target-feature
+distance, and retained variation show why the result is meaningful but partial.
 
 ## Terminology
 
@@ -139,7 +153,7 @@ matched distance is reported. Lower is better. The visual construction appears
 in notebook `01`; it should be read with coverage and diversity rather than as
 a complete quality certificate.
 
-## Questions for Class
+## Questions to carry into class
 
 1. Which components together form the complete generator in these notes?
 2. Why can a deterministic sampler produce diverse outputs from different noise seeds?
@@ -151,16 +165,11 @@ a complete quality certificate.
 8. Which conclusions from the 2D examples require new evidence before applying
    them to image diffusion models?
 
-## CIFAR-10 image experiment
-
-The toy examples make mechanisms visible; CIFAR-10 checks whether the same
-distribution-level correction measurably changes a real pretrained nonlinear
-generator. The experiment uses the official unconditional NVIDIA EDM
-checkpoint with deterministic sampling and a class-minus-full PCA denoiser
-correction. Its manifest locks checkpoint hashes, PCA provenance, evaluator,
-calibration/evaluation seed splits, and paired zero- and wrong-class controls.
-Read the [executed CIFAR-10 notebook](executed/cifar10_steering_with_unconditional_edm.ipynb)
-and [experiment contract](optional/CIFAR10_BRIDGE.md).
+The [executed notebooks](executed/) contain all figures and tables for reading.
+The output-free sources live one directory above. Reproduction details for
+Notebook `06` are kept separately in
+[the CIFAR-10 experiment record](optional/CIFAR10_BRIDGE.md), so the main note
+can stay focused on the mechanism and its interpretation.
 
 ## References
 
