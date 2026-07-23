@@ -335,7 +335,7 @@ The lines below make the definition literal. Lower is better. We still inspect
 mode coverage and spread because one scalar cannot diagnose every failure.
 '''),
         code(r'''
-plot_wasserstein_matching(generated, target)
+_ = plot_wasserstein_matching(generated, target)
 '''),
         code(r'''
 plot_velocity_field(model, device)
@@ -1010,7 +1010,7 @@ reference_data, reference_labels = sample_labeled_mixture(30000, device=device)
 stats = estimate_gaussian_stats(reference_data, reference_labels)
 TARGET_CLASS = 2
 model.eval()
-model.requires_grad_(False)
+_ = model.requires_grad_(False)
 '''),
         markdown(r'''
 ## 1. Why intervene inside the network?
