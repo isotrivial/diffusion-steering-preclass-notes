@@ -103,16 +103,32 @@
         "capture_steps": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0, "maximum": 17}}
       }
     },
-    "calibration": {"$ref": "#/$defs/run_split"},
+    "calibration": {
+      "allOf": [
+        {"$ref": "#/$defs/run_split"},
+        {
+          "type": "object",
+          "required": ["candidate_strengths", "candidate_end_steps", "minimum_feature_trace_ratio", "maximum_near_duplicate_rate", "selection_rule"],
+          "properties": {
+            "candidate_strengths": {"type": "array", "minItems": 1, "items": {"type": "number", "minimum": 0}},
+            "candidate_end_steps": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0, "maximum": 17}},
+            "minimum_feature_trace_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "maximum_near_duplicate_rate": {"type": "number", "minimum": 0, "maximum": 1},
+            "selection_rule": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
     "evaluation": {
       "allOf": [
         {"$ref": "#/$defs/run_split"},
         {
           "type": "object",
-          "required": ["bootstrap_seed", "bootstrap_draws", "minimum_target_rate_gain", "minimum_feature_trace_ratio", "maximum_runtime_seconds", "maximum_peak_memory_gb", "paired_noise"],
+          "required": ["bootstrap_seed", "bootstrap_draws", "minimum_target_rate", "minimum_target_rate_gain", "minimum_feature_trace_ratio", "maximum_runtime_seconds", "maximum_peak_memory_gb", "paired_noise"],
           "properties": {
             "bootstrap_seed": {"type": "integer", "minimum": 0},
             "bootstrap_draws": {"type": "integer", "minimum": 1000},
+            "minimum_target_rate": {"type": "number", "minimum": 0, "maximum": 1},
             "minimum_target_rate_gain": {"type": "number", "minimum": 0},
             "minimum_feature_trace_ratio": {"type": "number", "minimum": 0, "maximum": 1},
             "maximum_runtime_seconds": {"type": "number", "exclusiveMinimum": 0},

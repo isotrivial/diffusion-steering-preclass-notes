@@ -79,27 +79,29 @@
     "method": "class-minus-full PCA Wiener denoiser correction",
     "target_class": 3,
     "wrong_class": 8,
-    "strength": 4.0,
+    "strength": 3.0,
     "start_step": 0,
-    "end_step": 5,
-    "capture_steps": [0, 3, 6, 10, 17]
+    "end_step": 7,
+    "capture_steps": [0, 3, 6, 7, 10, 17]
   },
   "calibration": {
     "sample_count": 64,
     "sampling_seed": 10000,
     "batch_size": 64,
-    "candidate_strengths": [0.5, 1.0, 2.0, 3.0, 4.0],
-    "minimum_feature_trace_ratio": 0.6,
+    "candidate_strengths": [2.0, 3.0, 4.0, 5.0, 6.0, 8.0],
+    "candidate_end_steps": [5, 6, 7, 8, 9],
+    "minimum_feature_trace_ratio": 0.7,
     "maximum_near_duplicate_rate": 0.05,
-    "selection_rule": "Among finite candidates preserving at least 60% feature trace with at most 5% near duplicates, choose the largest mean target probability."
+    "selection_rule": "Among finite candidates preserving at least 70% feature trace with at most 5% near duplicates, choose the largest mean target probability."
   },
   "evaluation": {
     "sample_count": 256,
-    "sampling_seed": 0,
+    "sampling_seed": 30000,
     "batch_size": 64,
     "bootstrap_seed": 2113,
     "bootstrap_draws": 4000,
-    "minimum_target_rate_gain": 0.08,
+    "minimum_target_rate": 0.4,
+    "minimum_target_rate_gain": 0.25,
     "minimum_feature_trace_ratio": 0.6,
     "maximum_runtime_seconds": 600,
     "maximum_peak_memory_gb": 40,

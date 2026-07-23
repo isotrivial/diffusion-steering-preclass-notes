@@ -529,6 +529,8 @@ def run_bridge(
         "all_outputs_finite": all(method_metrics["finite"] for method_metrics in metrics.values()),
         "deterministic_repeat": deterministic_repeat_max_abs < 1e-6,
         "zero_strength_identity": zero_endpoint_max_abs < 1e-6,
+        "absolute_target_rate": metrics["target"]["target_rate"]
+        >= float(evaluation["minimum_target_rate"]),
         "target_rate_gain": target_gain >= float(evaluation["minimum_target_rate_gain"]),
         "paired_gain_lower_bound_positive": interval[0] > 0,
         "target_feature_distance_improves": (
@@ -550,6 +552,7 @@ def run_bridge(
         "device": torch.cuda.get_device_name(device),
         "evaluator_test_accuracy": measured_accuracy,
         "schedule": [float(value) for value in schedule.cpu()],
+        "seeds": seeds,
         "target_class": int(steering["target_class"]),
         "wrong_class": int(steering["wrong_class"]),
         "strength": float(steering["strength"]),
@@ -566,6 +569,13 @@ def run_bridge(
         "release_status": release_status,
         "images": images,
         "captures": captures,
+        "diagnostics": {
+            method: {
+                "predictions": raw[method]["predictions"],
+                "target_probabilities": raw[method]["target_probabilities"],
+            }
+            for method in raw
+        },
     }
 
 
@@ -623,34 +633,39 @@ def calibrate_strengths(
         int(calibration["batch_size"]),
     )
     candidates = []
-    for strength in strengths:
-        generated, _ = edm_heun_sample(
-            network,
-            latents,
-            schedule,
-            class_denoiser=target_denoiser,
-            full_denoiser=full_denoiser,
-            strength=float(strength),
-            start_step=int(steering["start_step"]),
-            end_step=int(steering["end_step"]),
-        )
-        candidate_metrics, _ = evaluate_samples(
-            generated,
-            evaluator,
-            int(steering["target_class"]),
-            target_reference_mean,
-            evaluator_device,
-            int(calibration["batch_size"]),
-        )
-        candidate_metrics["strength"] = float(strength)
-        candidate_metrics["target_rate_gain"] = (
-            candidate_metrics["target_rate"] - baseline_metrics["target_rate"]
-        )
-        candidate_metrics["feature_trace_ratio"] = (
-            candidate_metrics["feature_covariance_trace"]
-            / baseline_metrics["feature_covariance_trace"]
-        )
-        candidates.append(candidate_metrics)
+    strengths = [float(strength) for strength in strengths]
+    end_steps = calibration.get("candidate_end_steps", [steering["end_step"]])
+    for end_step in end_steps:
+        for strength in strengths:
+            generated, _ = edm_heun_sample(
+                network,
+                latents,
+                schedule,
+                class_denoiser=target_denoiser,
+                full_denoiser=full_denoiser,
+                strength=float(strength),
+                start_step=int(steering["start_step"]),
+                end_step=int(end_step),
+            )
+            candidate_metrics, _ = evaluate_samples(
+                generated,
+                evaluator,
+                int(steering["target_class"]),
+                target_reference_mean,
+                evaluator_device,
+                int(calibration["batch_size"]),
+            )
+            candidate_metrics["strength"] = float(strength)
+            candidate_metrics["end_step"] = int(end_step)
+            candidate_metrics["end_sigma"] = float(schedule[int(end_step)])
+            candidate_metrics["target_rate_gain"] = (
+                candidate_metrics["target_rate"] - baseline_metrics["target_rate"]
+            )
+            candidate_metrics["feature_trace_ratio"] = (
+                candidate_metrics["feature_covariance_trace"]
+                / baseline_metrics["feature_covariance_trace"]
+            )
+            candidates.append(candidate_metrics)
 
     eligible = [
         candidate
@@ -668,35 +683,58 @@ def calibrate_strengths(
         "baseline": baseline_metrics,
         "candidates": candidates,
         "selected_strength": None if selected is None else selected["strength"],
+        "selected_end_step": None if selected is None else selected["end_step"],
     }
 
 
 def json_summary(result: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in result.items() if key not in {"images", "captures"}}
+    return {
+        key: value
+        for key, value in result.items()
+        if key not in {"images", "captures", "diagnostics"}
+    }
 
 
 def write_json_summary(result: dict[str, Any], path: str | Path) -> None:
     Path(path).write_text(json.dumps(json_summary(result), indent=2) + "\n", encoding="utf-8")
 
 
-def plot_method_grid(result: dict[str, Any], count: int = 8):
+def plot_method_grid(result: dict[str, Any], count: int = 12):
     import matplotlib.pyplot as plt
 
-    methods = ["baseline", "zero", "target", "wrong"]
+    methods = ["baseline", "target", "wrong"]
     labels = {
         "baseline": "unconditional",
-        "zero": "zero strength",
         "target": f"target: {CIFAR10_CLASSES[result['target_class']]}",
         "wrong": f"wrong: {CIFAR10_CLASSES[result['wrong_class']]}",
     }
-    fig, axes = plt.subplots(len(methods), count, figsize=(1.7 * count, 6.8))
+    sample_count = len(result["images"]["baseline"])
+    count = min(int(count), sample_count)
+    indices = torch.linspace(0, sample_count - 1, count).round().long().tolist()
+    target_name = CIFAR10_CLASSES[result["target_class"]]
+    fig, axes = plt.subplots(len(methods), count, figsize=(1.5 * count, 5.7))
     for row, method in enumerate(methods):
-        batch = (result["images"][method][:count] + 1) / 2
-        for column in range(count):
-            axes[row, column].imshow(batch[column].permute(1, 2, 0).numpy())
+        batch = (result["images"][method] + 1) / 2
+        predictions = result["diagnostics"][method]["predictions"]
+        target_probabilities = result["diagnostics"][method]["target_probabilities"]
+        for column, sample_index in enumerate(indices):
+            axes[row, column].imshow(batch[sample_index].permute(1, 2, 0).numpy())
             axes[row, column].axis("off")
             if row == 0:
-                axes[row, column].set_title(f"seed {column}", fontsize=9)
+                axes[row, column].set_title(
+                    f"seed {result['seeds'][sample_index]}", fontsize=8
+                )
+            prediction = CIFAR10_CLASSES[int(predictions[sample_index])]
+            probability = float(target_probabilities[sample_index])
+            axes[row, column].text(
+                0.5,
+                -0.06,
+                f"{prediction}\nP({target_name})={probability:.2f}",
+                transform=axes[row, column].transAxes,
+                ha="center",
+                va="top",
+                fontsize=6.5,
+            )
         fig.text(
             0.012,
             1 - (row + 0.5) / len(methods),
@@ -706,9 +744,24 @@ def plot_method_grid(result: dict[str, Any], count: int = 8):
             ha="center",
             fontsize=10,
         )
-    fig.suptitle("Paired EDM samples: every column starts from the same noise", fontsize=13)
-    plt.tight_layout(rect=[0.035, 0, 1, 0.95])
+    fig.suptitle(
+        "Paired EDM samples on fixed, evenly spaced seeds (not selected by outcome)",
+        fontsize=13,
+    )
+    plt.tight_layout(rect=[0.035, 0.025, 1, 0.95], h_pad=1.4)
     return fig
+
+
+def first_target_conversion_index(result: dict[str, Any]) -> int:
+    """Return the first seed where target steering changes non-target to target."""
+
+    target_class = int(result["target_class"])
+    baseline = result["diagnostics"]["baseline"]["predictions"]
+    target = result["diagnostics"]["target"]["predictions"]
+    converted = torch.nonzero(
+        (baseline != target_class) & (target == target_class), as_tuple=False
+    ).flatten()
+    return int(converted[0]) if len(converted) else 0
 
 
 def plot_denoised_trajectory(result: dict[str, Any], sample_index: int = 0):
@@ -736,7 +789,12 @@ def plot_denoised_trajectory(result: dict[str, Any], sample_index: int = 0):
             ha="center",
             fontsize=10,
         )
-    fig.suptitle("EDM clean-image estimates along one deterministic trajectory", fontsize=13)
+    seed = result.get("seeds", list(range(len(result["images"]["baseline"]))))[
+        sample_index
+    ]
+    fig.suptitle(
+        f"EDM clean-image estimates along deterministic seed {seed}", fontsize=13
+    )
     plt.tight_layout(rect=[0.035, 0, 1, 0.92])
     return fig
 
