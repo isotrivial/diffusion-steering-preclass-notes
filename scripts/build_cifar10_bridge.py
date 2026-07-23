@@ -55,11 +55,6 @@ if not (OPTIONAL_DIR / "edm_cifar10_bridge.py").exists():
     OPTIONAL_DIR = Path("notebooks/toy_data/optional")
 sys.path.insert(0, str(OPTIONAL_DIR.resolve()))
 
-from IPython import get_ipython
-ipython = get_ipython()
-if ipython is not None:
-    ipython.run_line_magic("matplotlib", "inline")
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
@@ -96,16 +91,9 @@ high-noise window.
     ),
     code(
         r"""
-summary_rows = [
-    ("model", manifest["generator"]["architecture"]),
-    ("sampler", f"{manifest['sampler']['method']}, {manifest['sampler']['steps']} steps / {manifest['sampler']['network_evaluations']} evaluations"),
-    ("target", CIFAR10_CLASSES[manifest["steering"]["target_class"]]),
-    ("wrong-class control", CIFAR10_CLASSES[manifest["steering"]["wrong_class"]]),
-    ("correction strength", manifest["steering"]["strength"]),
-    ("guided transitions", f"{manifest['steering']['start_step']} through {manifest['steering']['end_step']}"),
-    ("evaluation samples", manifest["evaluation"]["sample_count"]),
-]
-pd.DataFrame(summary_rows, columns=["setting", "value"])
+def combine_denoisers(network_estimate, class_estimate, full_estimate, strength):
+    # The only change made to EDM's clean-image estimate.
+    return network_estimate + strength * (class_estimate - full_estimate)
 """
     ),
     markdown(
@@ -142,35 +130,31 @@ function as new evidence rather than as examples used to tune the method.
     ),
     code(
         r"""
-selected_strength = calibration_result["selected_strength"]
-selected_end_step = calibration_result["selected_end_step"]
 selected_calibration = next(
     row for row in calibration_result["candidates"]
-    if row["strength"] == selected_strength and row["end_step"] == selected_end_step
+    if row["strength"] == calibration_result["selected_strength"]
+    and row["end_step"] == calibration_result["selected_end_step"]
 )
-pd.DataFrame(
-    [
-        {
-            "setting": "unconditional",
-            "cat rate": calibration_result["baseline"]["target_rate"],
-            "mean cat probability": calibration_result["baseline"]["target_probability"],
-            "feature trace ratio": 1.0,
-            "near duplicates": calibration_result["baseline"]["near_duplicate_rate"],
-        },
-        {
-            "setting": f"strength {selected_strength:g}, through step {selected_end_step}",
-            "cat rate": selected_calibration["target_rate"],
-            "mean cat probability": selected_calibration["target_probability"],
-            "feature trace ratio": selected_calibration["feature_trace_ratio"],
-            "near duplicates": selected_calibration["near_duplicate_rate"],
-        },
-    ]
-).set_index("setting").round(3)
+calibration_rows = {
+    "unconditional": {
+        **calibration_result["baseline"],
+        "feature_trace_ratio": 1.0,
+    },
+    "selected steering": selected_calibration,
+}
+pd.DataFrame(calibration_rows).T[
+    ["target_rate", "target_probability", "feature_trace_ratio", "near_duplicate_rate"]
+].round(3)
 """
     ),
     code(
         r"""
-result = run_bridge(manifest, verify_hashes=True, verify_evaluator=True)
+result = run_bridge(
+    manifest,
+    verify_hashes=True,
+    verify_evaluator=True,
+    denoiser_combiner=combine_denoisers,
+)
 result_path = os.environ.get("CIFAR10_EDM_RESULT_PATH")
 if result_path:
     Path(result_path).parent.mkdir(parents=True, exist_ok=True)

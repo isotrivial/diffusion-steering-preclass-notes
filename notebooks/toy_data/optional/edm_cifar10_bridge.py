@@ -17,7 +17,7 @@ import tarfile
 import time
 import warnings
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import numpy as np
 import torch
@@ -184,6 +184,16 @@ def make_edm_schedule(
     return torch.cat([network.round_sigma(schedule), torch.zeros_like(schedule[:1])])
 
 
+def combine_denoised_estimates(
+    network_estimate: torch.Tensor,
+    class_estimate: torch.Tensor,
+    full_estimate: torch.Tensor,
+    strength: float,
+) -> torch.Tensor:
+    """Add the class-minus-full distribution correction to the EDM estimate."""
+    return network_estimate + float(strength) * (class_estimate - full_estimate)
+
+
 @torch.no_grad()
 def edm_heun_sample(
     network: torch.nn.Module,
@@ -196,6 +206,9 @@ def edm_heun_sample(
     end_step: int = 5,
     capture_steps: Iterable[int] = (),
     capture_count: int = 8,
+    denoiser_combiner: Callable[
+        [torch.Tensor, torch.Tensor, torch.Tensor, float], torch.Tensor
+    ] = combine_denoised_estimates,
 ) -> tuple[torch.Tensor, dict[int, dict[str, Any]]]:
     """NVIDIA EDM Algorithm 2 with a fixed clean-estimate correction.
 
@@ -213,10 +226,14 @@ def edm_heun_sample(
     def corrected_denoised(x: torch.Tensor, sigma: torch.Tensor, step: int) -> torch.Tensor:
         denoised = network(x, sigma, None).to(torch.float64)
         if class_denoiser is not None and start_step <= step <= end_step:
-            correction = class_denoiser(x.float(), float(sigma)) - full_denoiser(
-                x.float(), float(sigma)
+            class_estimate = class_denoiser(x.float(), float(sigma))
+            full_estimate = full_denoiser(x.float(), float(sigma))
+            denoised = denoiser_combiner(
+                denoised,
+                class_estimate.to(torch.float64),
+                full_estimate.to(torch.float64),
+                strength,
             )
-            denoised = denoised + float(strength) * correction.to(torch.float64)
         return denoised
 
     for step, (sigma_cur, sigma_next) in enumerate(zip(schedule[:-1], schedule[1:])):
@@ -404,6 +421,9 @@ def run_bridge(
     manifest: dict[str, Any],
     verify_hashes: bool = True,
     verify_evaluator: bool = True,
+    denoiser_combiner: Callable[
+        [torch.Tensor, torch.Tensor, torch.Tensor, float], torch.Tensor
+    ] = combine_denoised_estimates,
 ) -> dict[str, Any]:
     """Run the locked paired experiment and return plots plus JSON-ready metrics."""
 
@@ -484,6 +504,7 @@ def run_bridge(
             start_step=int(steering["start_step"]),
             end_step=int(steering["end_step"]),
             capture_steps=steering["capture_steps"] if method in {"baseline", "target"} else (),
+            denoiser_combiner=denoiser_combiner,
         )
         torch.cuda.synchronize(device)
         runtimes[method] = time.perf_counter() - method_started
