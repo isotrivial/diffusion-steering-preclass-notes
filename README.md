@@ -82,6 +82,7 @@ bash scripts/validate_cifar10_edm_bridge_ucsd.sh
 - `scripts/build_toy_notes.py`: readable source for the six generated notebooks;
 - `scripts/run_toy_notes.py`: ordered notebook runner;
 - `scripts/validate_toy_notes_ucsd.sh`: full core validation on one GPU;
+- `scripts/validate_all_notes_ucsd.sh`: one UCSD run for the complete 00-06 series;
 - `src/`, `configs/`, `checkpoints/`: retained upstream EPiC-FM research code.
 
 ## References
