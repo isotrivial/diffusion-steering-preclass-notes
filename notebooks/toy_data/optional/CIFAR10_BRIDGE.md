@@ -3,10 +3,11 @@
 ## Status
 
 The bridge is implemented as
-`cifar10_steering_with_unconditional_edm.ipynb`. It follows the six lightweight
-notes as the image-scale test of their Gaussian/PCA steering idea. It passed the
-revised manifest-locked A6000 validation on 2026-07-22. The complete
-machine-readable result is preserved in `cifar10_edm_evaluation.json`.
+`cifar10_steering_with_unconditional_edm.ipynb` and appears to readers as
+Notebook `06`. It follows the six lightweight notes as the image-scale test of
+their Gaussian/PCA steering idea. The complete machine-readable result is
+preserved in `cifar10_edm_evaluation.json`; this file keeps the reproduction
+and calibration details out of the learner-facing notebook.
 
 ## Locked generator
 

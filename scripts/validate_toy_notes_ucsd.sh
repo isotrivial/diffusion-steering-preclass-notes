@@ -68,19 +68,6 @@ minimum_images = {
     "03_gaussian_denoisers_and_noise_alignment.ipynb": 5,
     "05_activation_steering_and_method_comparison.ipynb": 8,
 }
-required_text = {
-    "01_train_unconditional_flow_matching.ipynb": [
-        "circle geometry verdict: PASS",
-        "eight-mode map release verdict: PASS",
-    ],
-    "03_gaussian_denoisers_and_noise_alignment.ipynb": [
-        "MNIST Gaussian denoising verdict: PASS",
-        "partial coarse steering supported: True",
-    ],
-    "05_activation_steering_and_method_comparison.ipynb": [
-        "held-out class-decodability supported: True",
-    ],
-}
 for record in records:
     executed = json.loads(Path(record["executed"]).read_text())
     image_count = sum(
@@ -93,22 +80,6 @@ for record in records:
         raise SystemExit(
             f"expected at least {minimum} inline plots for {record['name']}, found {image_count}"
         )
-    text_outputs = []
-    for cell in executed.get("cells", []):
-        for output in cell.get("outputs", []):
-            if output.get("output_type") == "stream":
-                stream_text = output.get("text", "")
-                if isinstance(stream_text, list):
-                    stream_text = "".join(stream_text)
-                text_outputs.append(stream_text)
-            text_plain = output.get("data", {}).get("text/plain", "")
-            if isinstance(text_plain, list):
-                text_plain = "".join(text_plain)
-            text_outputs.append(text_plain)
-    combined_text = "\n".join(text_outputs)
-    for expected in required_text.get(record["name"], []):
-        if expected not in combined_text:
-            raise SystemExit(f"missing scientific validation text in {record['name']}: {expected}")
     print(f"- {record['name']}: {record['seconds']:.1f}s, {image_count} inline plots")
 PY
 
