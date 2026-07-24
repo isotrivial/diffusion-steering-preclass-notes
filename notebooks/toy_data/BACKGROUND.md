@@ -285,7 +285,7 @@ controls, stronger quality metrics, and broader validation.
 
 | Idea | Toy realization | What changes at image scale |
 |---|---|---|
-| Class-minus-full correction (noise alignment) | target-class Gaussian denoiser minus full-data Gaussian denoiser | Notebook `06` uses low-rank PCA statistics over CIFAR-10 images |
+| Class-minus-full correction (noise alignment) | target-class Gaussian denoiser minus full-data Gaussian denoiser | Notebook `06` uses high-dimensional, nearly full-rank PCA-basis statistics over CIFAR-10 images |
 | Objective-gradient guidance | differentiate a class score through the 2D denoised estimate | a larger model would require an image-level objective and online backpropagation |
 | Activation collection | record one MLP hidden layer on labeled, noised points | an image experiment must choose a particular network block and tensor representation |
 | Activation direction | covariance-aware target-versus-rest direction | full NA-RFM uses a richer feature-learning construction |

@@ -19,7 +19,7 @@ teaching sequence itself uses small ordinary MLPs.
 | 01 | [Train an unconditional flow](notebooks/toy_data/executed/01_train_unconditional_flow_matching.ipynb) | Watch local velocity training produce a global flow; use circle and eight-mode transfer checks |
 | 02 | [Deterministic samplers and denoisers](notebooks/toy_data/executed/02_denoisers_and_deterministic_samplers.ipynb) | Compare Euler, Heun, and RK4 from the same noise, then read velocity as a clean estimate |
 | 03 | [Class-minus-full denoiser correction](notebooks/toy_data/executed/03_gaussian_denoisers_and_noise_alignment.ipynb) | Denoise held-out MNIST images before constructing the 2D distribution-level correction |
-| 04 | [Objective-gradient guidance](notebooks/toy_data/executed/04_training_free_gradient_guidance.ipynb) | Compare early, useful, and overly strong inference-time gradients |
+| 04 | [Objective-gradient guidance](notebooks/toy_data/executed/04_training_free_gradient_guidance.ipynb) | Compare timing, strength, endpoint behavior, and inference cost |
 | 05 | [Hidden-feature readout and control](notebooks/toy_data/executed/05_activation_steering_and_method_comparison.ipynb) | Separate probe accuracy from causal activation steering and compare intervention sites |
 | 06 | [Class-minus-full correction in CIFAR-10 EDM](notebooks/toy_data/executed/cifar10_steering_with_unconditional_edm.ipynb) | Read paired images, one trajectory, and three complementary measurements |
 

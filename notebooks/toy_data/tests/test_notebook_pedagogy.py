@@ -60,6 +60,17 @@ def test_reader_notebooks_avoid_stale_or_misleading_scaffolding():
         for phrase in banned:
             assert phrase not in text, f"{phrase!r} appears in {path.name}"
 
+    gradient_note = load_notebook(
+        NOTES_DIR / "04_training_free_gradient_guidance.ipynb"
+    )
+    gradient_source = "\n".join(source_text(cell) for cell in gradient_note["cells"]).lower()
+    for unsupported_label in (
+        "gradient, too strong",
+        "overly strong",
+        "what is lost when guidance becomes too strong",
+    ):
+        assert unsupported_label not in gradient_source
+
 
 def test_source_notebooks_are_output_free_and_keep_code_cells_short():
     for path in MAINTAINED_NOTEBOOKS:

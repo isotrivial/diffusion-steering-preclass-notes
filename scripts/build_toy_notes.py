@@ -951,8 +951,8 @@ with the current state. The generator remains frozen, but every active solver
 evaluation now requires a backward pass through its denoised estimate.
 
 This notebook asks two questions that a final target rate alone cannot answer:
-when is the gradient informative, and what is lost when guidance becomes too
-strong?
+when is the gradient informative, and what changes when its strength is
+doubled?
 
 **Time convention:** `t=0` is noise and `t=1` is data.
 '''),
@@ -1008,13 +1008,13 @@ plt.show()
 
 At very high noise, the denoised estimate carries little class information. At
 later times it is more informative, but an aggressive edit can damage a nearly
-formed sample. We compare an early window, a broad middle/late window, and an
-overly strong version of that broad window. Every method starts from the exact
-same noise tensor.
+formed sample. We compare an early window, a broad middle/late window at
+strength `3.0`, and the same broad window at strength `6.0`. Every method starts
+from the exact same noise tensor.
 
-**Before you run:** Predict which failure each setting is most likely to show:
-an uninformative early signal, useful class movement, or reduced diversity from
-excessive guidance.
+**Before you run:** Rank the three gradient settings by expected target-class
+rate, matching distance, spread, and runtime. Does doubling the strength improve
+all of the displayed endpoint measures, or does one begin to worsen?
 '''),
         code(r'''
 def gradient_guided_velocity(strength, start, end):
@@ -1046,7 +1046,7 @@ methods = {
     ),
     "gradient, early": gradient_guided_velocity(3.0, 0.02, 0.25),
     "gradient, middle/late": gradient_guided_velocity(3.0, 0.15, 0.92),
-    "gradient, too strong": gradient_guided_velocity(6.0, 0.15, 0.92),
+    "gradient, strength 6.0": gradient_guided_velocity(6.0, 0.15, 0.92),
 }
 
 rows, paths = compare_steering_methods(
@@ -1060,7 +1060,7 @@ plot_trajectory_comparison(
         "baseline": paths["baseline"],
         "early gradient": paths["gradient, early"],
         "middle/late gradient": paths["gradient, middle/late"],
-        "too strong": paths["gradient, too strong"],
+        "strength 6.0": paths["gradient, strength 6.0"],
     },
     target_reference=target_reference[:700],
 )
@@ -1090,9 +1090,13 @@ depends on hardware, but the computational distinction is structural:
 | Class-minus-full PCA | yes | no | forwards + small matrix-vector operations |
 | Gradient guidance | yes or external classifier | yes | forwards + backward passes |
 
-The middle/late result should be read together with the early and overly strong
-comparisons. A direction can be locally correct yet poorly timed, and stronger
-control can trade away distributional fit or diversity.
+The strength-`6.0` setting is not a demonstrated failure in this sweep. It
+improves the displayed target rate and matching distance, and its diversity
+ratio moves closer to the target value of `1`, although the samples remain
+broader than the target distribution. Both broad-window gradient settings are
+substantially slower than the baseline because active guidance requires
+backward passes. Stronger guidance can eventually damage quality or diversity,
+but these rows do not establish that failure.
 
 **Change one thing:** In the methods cell, change only the end of the
 middle/late window from `0.92` to `0.60`. Rerun the comparison and ask whether

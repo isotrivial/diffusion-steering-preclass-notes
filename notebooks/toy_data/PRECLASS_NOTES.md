@@ -93,9 +93,11 @@ non-Gaussian class distribution.
 
 A differentiable class objective provides a state-dependent direction rather
 than one Gaussian approximation. The notebook draws the gradient field and
-compares early, middle-to-late, and overly strong interventions from paired
-noise. The added flexibility has a computational cost: the sampler must
-differentiate through the clean estimate whenever guidance is active.
+compares early, middle-to-late, and doubled-strength interventions from paired
+noise. In this bounded sweep, the doubled strength improves every displayed
+endpoint measure; the demonstrated disadvantage of gradient guidance is greater
+inference cost. The added flexibility has a computational cost: the sampler
+must differentiate through the clean estimate whenever guidance is active.
 
 ### 05: Does a readable hidden feature provide control?
 
@@ -114,7 +116,7 @@ forward-only hidden-feature edit whose effect depends on layer and time.
 ### 06: A class-minus-full correction in an unconditional CIFAR-10 EDM
 
 The image note uses NVIDIA's pretrained unconditional CIFAR-10 EDM. It receives
-no class label. The sampler adds a low-rank cat-minus-full PCA denoiser
+no class label. The sampler adds a full-image PCA-basis cat-minus-full denoiser
 correction only at high noise and compares baseline, zero-strength, target, and
 wrong-class runs from identical seeds. Paired images and one trajectory make
 the intervention visible; target prediction, target-feature distance, and
