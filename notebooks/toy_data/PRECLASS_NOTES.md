@@ -1,175 +1,187 @@
-# Reading Guide: Flow Matching and Post-Hoc Steering
+# Reading Guide: From Noise to Post-Hoc Steering
 
-## One question across the series
+## Why these notes begin with generation
 
-These seven notes follow one question: how can a frozen unconditional generator
-be steered without pulling a sample toward a chosen point? The answer requires
-several ideas in order. We first separate the source distribution, learned
-model, and sampler; then train and inspect a flow; then translate velocity into
-a denoised estimate; and only then compare distributional, gradient-based, and
-hidden-feature interventions.
+Steering is easiest to misunderstand when the generator itself is still a
+black box. A diffusion or flow model does not retrieve a stored example, and a
+deterministic sampler does not produce the same output every time. Generation
+starts from a fresh random draw, follows a learned local rule, and accumulates
+many small updates into a new sample.
 
-The intended reader may have limited background in differential equations,
-diffusion models, or representation learning. No generative-model taxonomy or
-stochastic calculus is assumed. Each mathematical object is introduced in
-words, equations, and figures before it is used for steering.
+The seven notes build that picture before adding control. They use small
+examples because every state, vector field, trajectory, and failure can be
+drawn. The last note then asks which part of the argument survives in NVIDIA's
+pretrained unconditional CIFAR-10 EDM.
 
-The toy steering notes use one unconditional flow-matching MLP. Class labels
-never enter its training input. Labels appear later only to fit post-hoc
-signals and to compare their effects.
+The recurring question is:
 
-Notebook `01` also trains separate unlabeled circle and eight-Gaussian models
-to make continuous geometry and multimodal flow maps easy to see. Those
-illustration models are not used by the steering notebooks.
+> How can we bias a frozen unconditional generator toward a class without
+> pulling every trajectory toward one chosen example or coordinate?
 
-## Useful Background
+The answer develops in stages: learn an unconditional flow, understand the
+sampler, reinterpret velocity as a denoised estimate, and then compare three
+post-hoc interventions. Labels never enter the toy generator during training.
+They are used later to fit or evaluate steering signals.
 
-Readers should be comfortable with:
+## How to read the notebooks
 
-- Python functions, arrays, plotting, and dictionaries;
-- PyTorch tensors, modules, optimizers, and automatic differentiation;
-- vectors, matrix multiplication, means, variances, and basic probability;
-- the idea that an ODE specifies a local rate of change.
+Each note follows the same short rhythm:
 
-Gaussian distributions, covariance, PCA, numerical integration, classifiers,
-and hidden representations are introduced visually as they are needed.
+1. A visible phenomenon raises one concrete question.
+2. A **Before you run** prompt asks for a prediction.
+3. One paired experiment changes a single mechanism while keeping the initial
+   noise and other settings fixed.
+4. The figure is interpreted immediately, including what it does not show.
+5. A **Change one thing** prompt exposes a bounded parameter worth exploring.
 
-### Generative-model vocabulary used throughout
+The executed notebooks are the reading copies. The source notebooks remain
+output-free so that rerunning them produces a clean experiment rather than a
+mixture of old and new results.
 
-The training dataset supplies examples of an unknown distribution. A base
-Gaussian supplies easy-to-sample random starting points. The neural model learns
-a local prediction, and a sampler turns those predictions into a complete
-trajectory. In this series, the full generator is therefore
+## The argument across the series
+
+### 00: How does noise become a new sample?
+
+The first note separates four objects that are often conflated: a data
+distribution, a noising path, a learned velocity field, and a numerical
+sampler. The figures show a distribution changing across time rather than a
+single clean example being reconstructed from its own corrupted copy. This
+leaves a practical question for the next note: can a neural network learn the
+required local velocities from random training pairs?
+
+### 01: Can local velocity predictions generate the whole distribution?
+
+A small MLP is trained by flow matching on three unlabeled Gaussian clusters.
+The notebook connects the training target to sampled trajectories and then
+checks the generated point cloud, not just the loss curve. A noisy circle asks
+whether the model can form thin curved support. Eight separated Gaussians make
+mode coverage, occupancy imbalance, and the flow map easy to inspect. These
+transfer examples show why one scalar loss is not enough to understand a
+generator.
+
+### 02: Same field, different deterministic samplers
+
+Euler, Heun, and RK4 integrate the same learned ODE from exactly the same noise
+tensor. Their paired endpoints reveal numerical error without confusing it
+with different random draws. Only after that comparison does the notebook
+derive
 
 ```text
-base distribution + trained velocity model + ODE sampler.
+D_theta(x_t,t) = x_t + (1-t) v_theta(x_t,t),
 ```
 
-Training uses data examples to fit the velocity model. Generation starts from
-fresh noise and does not receive a paired clean answer. Different noise seeds
-provide diversity even when the ODE sampler is deterministic.
+the clean estimate associated with the linear flow path. This conversion
+matters because the steering methods are easier to state as edits to a
+denoiser, even though the toy network predicts velocity.
 
-## Reading path
+### 03: From a Gaussian denoiser to a class-minus-full correction
 
-### 00: Diffusion and flow-matching foundations
+Before using covariance for control, the note tests a Gaussian/PCA posterior
+mean on held-out noisy MNIST digits. The eigendigits show what the model keeps,
+and reconstruction error shows where the approximation helps. The same idea is
+then made fully visible in 2D: subtract the full-data Gaussian denoiser from a
+target-class Gaussian denoiser and add that difference during an early,
+high-noise interval. The steering paper calls this **noise alignment**. In the
+notes, **class-minus-full correction** is used first because it states exactly
+what is computed.
 
-We first need a concrete picture of what turns noise into a sample. This note
-separates the source distribution, learned velocity field, and numerical
-sampler, then leaves the central unresolved question: can the velocity field
-actually be learned?
+This is a distributional correction, not attraction to a point. Means and
+covariances can provide coarse class bias, but they cannot represent all of a
+non-Gaussian class distribution.
 
-### 01: Unconditional flow-matching training
+### 04: Objective-gradient guidance during sampling
 
-Training one small model exposes the connection between the flow-matching loss
-and generated samples. A three-component mixture checks familiar modes, a noisy
-circle tests curved continuous support, and eight Gaussians reveal missing-mode
-and occupancy failures. These visible failures motivate a closer look at what
-the model predicts and how the sampler follows it.
+A differentiable class objective provides a state-dependent direction rather
+than one Gaussian approximation. The notebook draws the gradient field and
+compares early, middle-to-late, and overly strong interventions from paired
+noise. The added flexibility has a computational cost: the sampler must
+differentiate through the clean estimate whenever guidance is active.
 
-### 02: Denoisers and deterministic samplers
+### 05: Does a readable hidden feature provide control?
 
-The next methods are written in denoiser language even though our network
-predicts velocity. This note derives the conditional-expectation meaning of
-`D_theta(x_t,t) = x_t + (1-t)v_theta(x_t,t)`, explains the endpoint caveat,
-and compares Euler, Heun, and RK4 from exactly the same initial noise tensor.
-That paired deterministic setup becomes the common comparison tool for every
-steering method that follows.
+The final toy note probes an internal MLP layer across time. A held-out linear
+probe measures when class information becomes readable, while direction
+alignment shows whether one fixed edit remains meaningful as the representation
+changes. The intervention then tests causality with zero-strength and shuffled-
+direction controls. This distinction is central: a feature can encode class
+information without being a strong control direction for the downstream
+velocity.
 
-### 03: Gaussian/PCA noise alignment
+The closing comparison places the three mechanisms side by side: a cheap
+class-minus-full correction, flexible online gradient guidance, and a
+forward-only hidden-feature edit whose effect depends on layer and time.
 
-Before using a Gaussian correction for steering, we test whether low-rank
-covariance structure can denoise held-out MNIST pixels. We then visualize the
-target-class minus full-data denoiser in 2D and apply it only during a
-high-noise window. A zero-strength control separates partial coarse steering
-from full class-conditional generation. Its limitation is equally important:
-means and covariances describe only coarse structure.
+### 06: A class-minus-full correction in an unconditional CIFAR-10 EDM
 
-### 04: Post-hoc objective-gradient guidance
+The image note uses NVIDIA's pretrained unconditional CIFAR-10 EDM. It receives
+no class label. The sampler adds a low-rank cat-minus-full PCA denoiser
+correction only at high noise and compares baseline, zero-strength, target, and
+wrong-class runs from identical seeds. Paired images and one trajectory make
+the intervention visible; target prediction, target-feature distance, and
+retained feature variation quantify the tradeoff.
 
-Covariance guidance is efficient but restrictive. A differentiable class
-objective is more flexible, so this note visualizes its gradient and compares
-its behavior and backward-pass cost with the forward-only Gaussian/PCA
-correction. This raises the next question: can useful class information be
-accessed without an online backward pass?
+The result is deliberately narrow. It demonstrates a measurable class-specific
+shift while preserving substantial variation, not reliable class-conditional
+generation. Full asset, calibration, and evaluator details live in
+[the experiment record](optional/CIFAR10_BRIDGE.md) rather than interrupting the
+reader-facing notebook.
 
-### 05: Hidden-feature steering and method comparison
+## Minimal background
 
-The final toy note asks whether a forward-only edit can act inside the frozen
-network. It first measures whether class is readable from held-out hidden
-features, then tests a target-vs-rest direction against shuffled controls and
-compares activation steering with noise alignment and objective-gradient
-guidance.
+Readers should be comfortable with Python arrays and plots, basic PyTorch, and
+vectors, means, and variances. The notes introduce ODE integration, Gaussian
+conditioning, PCA, classifiers, and hidden representations when they first
+become useful. No stochastic calculus is assumed.
 
-### 06: Noise alignment in an unconditional CIFAR-10 EDM
+The complete generator in the toy notes is
 
-The final note carries the high-noise class-minus-full PCA correction to
-NVIDIA's pretrained unconditional CIFAR-10 EDM. Paired images show how an early
-change can alter a late sample, while target preference, target-feature
-distance, and retained variation show why the result is meaningful but partial.
+```text
+base Gaussian + learned velocity model + deterministic ODE sampler.
+```
 
-## Terminology
+Training uses data to fit the velocity model. Generation starts from fresh
+noise and has no paired clean answer. Once a noise tensor, checkpoint, solver,
+and settings are fixed, the ODE rollout is deterministic. Reusing that exact
+noise tensor across methods is therefore an experimental control; it is not a
+steering method.
 
-| Phrase | Meaning in these notes |
+## Terms used consistently
+
+| Term | Meaning here |
 |---|---|
-| generative model | A learned procedure for producing new samples that resemble a data distribution |
-| generative sampling | Transform fresh base noise into a new data-like sample without a paired known clean answer |
 | unconditional generator | A generator that receives no requested class or prompt |
-| base distribution | The easy Gaussian source used to start generation |
-| I-CFM | Independent source/data coupling with a linear conditional path |
-| deterministic sampler | The trajectory is fixed once model, solver, settings, and initial noise are fixed |
-| paired initial noise | Reusing the exact initial tensor to isolate method effects |
-| denoised estimate | Clean-data estimate derived from the linear-path velocity parameterization |
-| noise alignment | Target-class Gaussian/PCA denoiser minus full-data Gaussian/PCA denoiser at high noise |
-| post-hoc gradient guidance | Frozen generator plus an inference-time objective gradient |
-| activation steering | A learned direction added to an internal feature layer |
-| gradient-free inference | No backward pass during sampling; offline statistics or direction fitting may still be required |
+| base distribution | The easy Gaussian distribution sampled at the start |
+| velocity field | A local prediction of how the current state should change with time |
+| deterministic sampler | A numerical ODE solver whose trajectory is fixed by its initial state and settings |
+| same-seed comparison | Reuse the exact initial noise tensor to isolate the effect of a method |
+| denoised estimate | The clean-data estimate obtained from the linear-path velocity parameterization |
+| class-minus-full correction | Target-class Gaussian/PCA denoiser minus the full-data Gaussian/PCA denoiser |
+| noise alignment | The paper's name for the class-minus-full distributional correction |
+| objective-gradient guidance | An inference-time gradient of a differentiable target objective |
+| activation steering | A fitted direction added to an internal feature layer |
 
-The path in these notebooks is I-CFM, not OT-CFM: no optimal transport coupling
-is solved. Post-hoc fitting should not be called "no training" without stating
-what was fit. Paired initial noise is an evaluation control, not the
-noise-alignment steering method.
+The training path is independent conditional flow matching with a linear
+source-data coupling. No optimal-transport coupling is solved. Post-hoc fitting
+is described explicitly rather than being hidden under the phrase "training
+free."
 
-## Reading the Comparisons
+## Reading quantitative comparisons
 
-When two methods are compared, the checkpoint, initial noise tensor, target
-reference, solver, step count, sample count, and evaluation statistics are held
-fixed. The tables show several quantities because target-class rate alone does
-not establish that a steering method preserves fidelity or diversity:
+Paired method comparisons hold the checkpoint, initial noise tensor, target,
+solver, step count, sample count, and evaluator fixed. No single number is
+treated as a certificate of sample quality. The notes use an empirical
+Wasserstein matching distance together with visible samples, mode coverage,
+mean error, and diversity. The diversity ratio divides generated total variance
+by target-class total variance, so `1` matches the target scale, values below
+`1` are too narrow, and large values remain too broad. For the circle, radial
+error and angular occupancy separate ring thickness from missing arcs. For
+eight Gaussians, component coverage and occupancy reveal missing or
+overrepresented modes.
 
-- target-class rate;
-- Wasserstein distance to target examples;
-- mean error relative to the target distribution;
-- diversity ratio;
-- wall-clock time.
-
-The circle adds radial and angular-occupancy checks. The eight-Gaussian flow map
-adds mode coverage, component occupancy error, and within-component spread.
-These are broad sanity checks, not a claim that the learned and target
-densities are exactly equal.
-
-The reported Wasserstein distance is a finite-sample estimate: equal-size
-subsets are paired by minimum total Euclidean matching cost, and the mean
-matched distance is reported. Lower is better. The visual construction appears
-in notebook `01`; it should be read with coverage and diversity rather than as
-a complete quality certificate.
-
-## Questions to carry into class
-
-1. Which components together form the complete generator in these notes?
-2. Why can a deterministic sampler produce diverse outputs from different noise seeds?
-3. Why is a denoised estimate useful when the trained network predicts velocity?
-4. Why does deterministic sampling make paired initial noise informative?
-5. Why is Gaussian/PCA guidance concentrated at high noise?
-6. Why can gradient guidance be more expensive than forward-only guidance?
-7. At what times do hidden features become class-informative?
-8. Which conclusions from the 2D examples require new evidence before applying
-   them to image diffusion models?
-
-The [executed notebooks](executed/) contain all figures and tables for reading.
-The output-free sources live one directory above. Reproduction details for
-Notebook `06` are kept separately in
-[the CIFAR-10 experiment record](optional/CIFAR10_BRIDGE.md), so the main note
-can stay focused on the mechanism and its interpretation.
+The reported empirical Wasserstein matching distance is the mean distance under
+a minimum-cost one-to-one matching between equal-size deterministic subsets.
+It is useful for these small 2D comparisons, but it remains a finite-sample
+summary and should be read with the figures.
 
 ## References
 

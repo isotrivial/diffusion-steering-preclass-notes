@@ -251,6 +251,49 @@ def plot_flow_endpoints(
     plt.show()
 
 
+def plot_flow_snapshots(
+    path: torch.Tensor,
+    generated: torch.Tensor,
+    target: torch.Tensor,
+    target_labels: torch.Tensor,
+    *,
+    count: int = 1500,
+) -> None:
+    """Show how one fixed batch is partitioned by its eventual destination."""
+    stats = estimate_gaussian_stats(target, target_labels)
+    final_labels = predict_classes(generated, stats).cpu()
+    indexes = torch.linspace(0, path.shape[1] - 1, min(count, path.shape[1])).long()
+    snapshot_steps = np.linspace(0, path.shape[0] - 1, 5).round().astype(int)
+
+    fig, axes = plt.subplots(1, len(snapshot_steps), figsize=(16, 3.4))
+    for ax, step in zip(axes, snapshot_steps):
+        points = path[step][indexes]
+        labels = final_labels[indexes]
+        for class_id, color in enumerate(CLASS_COLORS):
+            mask = labels == class_id
+            ax.scatter(
+                points[mask, 0],
+                points[mask, 1],
+                s=6,
+                alpha=0.34,
+                color=color,
+            )
+        ax.set(
+            title=f"t={step / (path.shape[0] - 1):.2f}",
+            aspect="equal",
+            xlim=(-4.5, 4.5),
+            ylim=(-4.2, 4.5),
+        )
+        ax.set_xticks([])
+        ax.set_yticks([])
+    fig.suptitle(
+        "One deterministic flow; color is assigned from each final endpoint",
+        y=1.02,
+    )
+    plt.tight_layout()
+    plt.show()
+
+
 def flow_endpoint_diagnostics(
     generated: torch.Tensor,
     target: torch.Tensor,
@@ -262,7 +305,7 @@ def flow_endpoint_diagnostics(
     balance /= balance.sum()
     return [
         {
-            "diagnostic": "Wasserstein distance to full target",
+            "diagnostic": "empirical matching distance to full target",
             "value": wasserstein_distance(generated, target),
         },
         {
@@ -342,7 +385,9 @@ def plot_wasserstein_matching(
     for ax in axes[:2]:
         ax.set_xticks([])
         ax.set_yticks([])
-    fig.suptitle(f"Empirical Wasserstein distance = {matched.mean():.3f}", y=1.02)
+    fig.suptitle(
+        f"Empirical Wasserstein matching distance = {matched.mean():.3f}", y=1.02
+    )
     plt.tight_layout()
     plt.show()
     return float(matched.mean())
@@ -449,7 +494,7 @@ def circle_flow_metrics(case: Mapping[str, Any]) -> list[dict[str, float]]:
             ),
         },
         {
-            "diagnostic": "generated-to-target Wasserstein distance",
+            "diagnostic": "generated-to-target empirical matching distance",
             "value": generated_distance,
         },
         {
@@ -470,7 +515,7 @@ def plot_circle_flow(case: Mapping[str, Any]) -> None:
         torch.atan2(generated[:, 1], generated[:, 0]), 2 * np.pi
     )
 
-    fig, axes = plt.subplots(1, 4, figsize=(16, 3.8))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.8))
     axes[0].scatter(
         source[:, 0].cpu(), source[:, 1].cpu(), s=5, alpha=0.20, color="#777777"
     )
@@ -493,14 +538,7 @@ def plot_circle_flow(case: Mapping[str, Any]) -> None:
         alpha=0.35,
     )
     axes[2].set_title("Generated endpoints")
-    values = np.asarray(case["losses"], dtype=float)
-    axes[3].plot(values, color="#0072B2", alpha=0.45, lw=0.8)
-    if len(values) >= 100:
-        smooth = np.convolve(values, np.ones(100) / 100, mode="valid")
-        axes[3].plot(np.arange(99, len(values)), smooth, color="#D55E00", lw=2)
-    axes[3].set(title="Circle training loss", xlabel="optimization step", ylabel="MSE")
-    axes[3].grid(alpha=0.2)
-    for ax in axes[:3]:
+    for ax in axes:
         ax.set(aspect="equal", xlim=(-4.5, 4.5), ylim=(-4.5, 4.5))
         ax.set_xticks([])
         ax.set_yticks([])
@@ -575,7 +613,7 @@ def eight_gaussian_metrics(
             "value": float((0.5 * torch.abs(fractions - 1 / 8).sum()).cpu()),
         },
         {
-            "diagnostic": "generated-to-target Wasserstein distance",
+            "diagnostic": "generated-to-target empirical matching distance",
             "value": generated_distance,
         },
         {
@@ -663,28 +701,6 @@ def plot_eight_gaussian_flow(case: Mapping[str, Any]) -> None:
     )
     plt.tight_layout()
     plt.show()
-
-    fig, ax = plt.subplots(figsize=(6.2, 6.0))
-    trajectory_indexes = torch.linspace(0, path.shape[1] - 1, 64).long()
-    for index in trajectory_indexes:
-        component = int(assignments[int(index)].cpu())
-        ax.plot(
-            path[:, int(index), 0],
-            path[:, int(index), 1],
-            color=EIGHT_GAUSSIAN_COLORS[component],
-            alpha=0.50,
-            lw=0.9,
-        )
-    ax.set(
-        title="64 complete trajectories through the learned eight-mode flow",
-        aspect="equal",
-        xlim=(-4.5, 4.5),
-        ylim=(-4.5, 4.5),
-    )
-    ax.set_xticks([])
-    ax.set_yticks([])
-    plt.show()
-
 
 def plot_velocity_to_denoiser(
     x_t: torch.Tensor,
@@ -826,7 +842,7 @@ def solver_metrics_from_paths(
                 "paired endpoint RMSE": float(
                     torch.sqrt(torch.mean((path[-1] - reference_endpoint) ** 2))
                 ),
-                "Wasserstein distance to target": wasserstein_distance(
+                "empirical matching distance to target": wasserstein_distance(
                     path[-1], target.cpu()
                 ),
             }
@@ -860,7 +876,7 @@ def plot_pca_components(
     class_stats: Any,
     *,
     image_shape: tuple[int, int] = (28, 28),
-    components: int = 5,
+    components: int = 3,
 ) -> None:
     fig, axes = plt.subplots(2, components + 1, figsize=(10, 3.8))
     axes[0, 0].imshow(
@@ -887,6 +903,24 @@ def plot_pca_components(
     plt.show()
 
 
+def plot_pca_shrinkage(stats: Any, *, components: int = 4) -> None:
+    """Show how observation weight changes with noise in leading PCA directions."""
+    sigma = torch.linspace(0, 1.5, 200, device=stats.variances.device)
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for index, variance in enumerate(stats.variances[:components]):
+        weight = variance / (variance + sigma.square())
+        ax.plot(sigma.cpu(), weight.cpu(), label=f"PC {index + 1}")
+    ax.set(
+        xlabel="additive noise level sigma",
+        ylabel="observation weight",
+        title="High-variance directions retain influence longer",
+        ylim=(-0.02, 1.02),
+    )
+    ax.grid(alpha=0.2)
+    ax.legend(frameon=False)
+    plt.show()
+
+
 def plot_image_rows(
     rows: Iterable[tuple[str, torch.Tensor]],
     *,
@@ -905,15 +939,21 @@ def plot_image_rows(
                 vmax=1,
             )
             axes[row_index, column].axis("off")
-        axes[row_index, 0].set_ylabel(
-            label, rotation=0, ha="right", va="center", labelpad=34
+        axes[row_index, 0].text(
+            -0.16,
+            0.5,
+            label,
+            transform=axes[row_index, 0].transAxes,
+            ha="right",
+            va="center",
+            fontsize=9,
         )
     fig.suptitle(title, y=1.01)
-    plt.tight_layout()
+    plt.tight_layout(rect=(0.13, 0, 1, 0.97))
     plt.show()
 
 
-def plot_noise_alignment_field(
+def plot_class_minus_full_field(
     grid: torch.Tensor,
     delta: torch.Tensor,
     reference_data: torch.Tensor,
@@ -935,7 +975,7 @@ def plot_noise_alignment_field(
     axes[0].set(
         xlabel="t: noise to data",
         ylabel="gate g(t)",
-        title="Correction is active only at high noise",
+        title="The class-minus-full correction is used at high noise",
     )
     axes[0].grid(alpha=0.2)
     axes[1].quiver(
@@ -954,12 +994,15 @@ def plot_noise_alignment_field(
         reference_data[:2500],
         reference_labels[:2500],
         ax=axes[1],
-        title=f"$D_{{target}}-D_{{full}}$ at t={t_value:.2f}",
+        title=f"Class-minus-full denoiser change at t={t_value:.2f}",
         alpha=0.18,
     )
     axes[1].set(xlim=(-4.8, 4.8), ylim=(-4.8, 4.8))
     plt.tight_layout()
     plt.show()
+
+
+plot_noise_alignment_field = plot_class_minus_full_field
 
 
 def compare_steering_methods(
@@ -983,7 +1026,7 @@ def compare_steering_methods(
     return rows, paths
 
 
-def plot_noise_alignment_comparison(
+def plot_class_minus_full_comparison(
     paths: Mapping[str, torch.Tensor],
     table: Any,
     target_reference: torch.Tensor,
@@ -992,11 +1035,11 @@ def plot_noise_alignment_comparison(
     strength: float,
 ) -> None:
     baseline = paths["baseline"][-1].to(target_reference.device)
-    steered = paths[f"noise alignment {strength:.1f}"][-1].to(target_reference.device)
+    steered = paths[f"class-minus-full {strength:.1f}"][-1].to(target_reference.device)
     fig, axes = plt.subplots(1, 3, figsize=(14.5, 4.3))
     for ax, endpoints, title in (
         (axes[0], baseline, "Baseline endpoints"),
-        (axes[1], steered, f"Noise alignment, strength {strength:.1f}"),
+        (axes[1], steered, f"Class-minus-full correction, strength {strength:.1f}"),
     ):
         predicted = predict_classes(endpoints, stats)
         ax.scatter(
@@ -1041,21 +1084,27 @@ def plot_noise_alignment_comparison(
     plt.show()
 
     sweep = table.dropna(subset=["strength"]).sort_values("strength")
-    fig, axes = plt.subplots(1, 4, figsize=(15, 3.6))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.6))
     specifications = (
         ("target_rate", "target-class rate (higher)", None),
-        ("target_wasserstein", "Wasserstein distance to target (lower)", None),
-        ("mean_error", "target mean error (lower)", None),
+        (
+            "target_wasserstein",
+            "empirical matching distance to target (lower)",
+            None,
+        ),
         ("diversity_ratio", "diversity ratio", 1.0),
     )
     for ax, (column, label, ideal) in zip(axes, specifications):
         ax.plot(sweep["strength"], sweep[column], marker="o", color="#0072B2")
         if ideal is not None:
             ax.axhline(ideal, color="#777777", ls="--")
-        ax.set(xlabel="noise-alignment strength", ylabel=label)
+        ax.set(xlabel="correction strength", ylabel=label)
         ax.grid(alpha=0.2)
     plt.tight_layout()
     plt.show()
+
+
+plot_noise_alignment_comparison = plot_class_minus_full_comparison
 
 
 def plot_activation_pipeline() -> None:
@@ -1156,7 +1205,7 @@ def plot_activation_probe_sweep(
         xlabel="t (noise to data)",
         ylabel="held-out accuracy",
         ylim=(0.25, 1.02),
-        title="Class information across time",
+        title="Linear decodability across time",
     )
     axes[0].grid(alpha=0.2)
     axes[0].legend(frameon=False)
@@ -1185,7 +1234,7 @@ def plot_method_tradeoff(table: Any) -> None:
         "baseline": "o",
         "shuffled activation": "s",
         "activation steering": "D",
-        "noise alignment": "^",
+        "class-minus-full": "^",
         "gradient guidance": "v",
         "noise + activation": "P",
     }
@@ -1206,7 +1255,7 @@ def plot_method_tradeoff(table: Any) -> None:
             fontsize=9,
         )
     ax.set(
-        xlabel="Wasserstein distance to target class (lower is better)",
+        xlabel="empirical matching distance to target class (lower is better)",
         ylabel="target-class rate (higher is better)",
         title="Control-quality trade-off",
     )

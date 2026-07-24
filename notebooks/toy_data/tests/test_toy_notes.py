@@ -29,7 +29,7 @@ from toy_notes import (  # noqa: E402
     integrate_ode,
     low_rank_gaussian_denoise,
     make_activation_steered_velocity,
-    make_noise_aligned_velocity,
+    make_class_minus_full_velocity,
     model_state_digest,
     sample_labeled_mixture,
     sample_eight_gaussians,
@@ -155,7 +155,7 @@ def test_window_gate_is_zero_outside_window():
     assert gate.min() >= 0 and gate.max() <= 1
 
 
-def test_zero_strength_guidance_matches_baseline():
+def test_zero_strength_class_minus_full_correction_matches_baseline():
     torch.manual_seed(9)
     model = VelocityMLP(hidden_dim=24)
     samples, labels = sample_labeled_mixture(600, device=torch.device("cpu"))
@@ -163,7 +163,7 @@ def test_zero_strength_guidance_matches_baseline():
     x = torch.randn(30, 2)
     t = torch.full((30,), 0.2)
     baseline = model(t, x)
-    guided = make_noise_aligned_velocity(
+    guided = make_class_minus_full_velocity(
         model, stats, target_class=1, strength=0.0
     )(t, x)
     assert torch.equal(guided, baseline)

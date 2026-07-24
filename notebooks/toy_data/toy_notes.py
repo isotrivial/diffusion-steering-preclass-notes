@@ -658,16 +658,42 @@ def low_rank_gaussian_denoise(
     return stats.mean + (coordinates * shrinkage) @ stats.components.T
 
 
-def noise_alignment_delta(
+def class_minus_full_delta(
     x: torch.Tensor, t: torch.Tensor, target_class: int, stats: GaussianStats
 ) -> torch.Tensor:
-    """Class PCA/Gaussian denoiser minus full-data PCA/Gaussian denoiser."""
+    """Target-class Gaussian denoiser minus the full-data Gaussian denoiser."""
     y, sigma = additive_noise_coordinates(x, t)
     class_denoised = gaussian_denoise(
         y, sigma, stats.means[target_class], stats.covariances[target_class]
     )
     full_denoised = gaussian_denoise(y, sigma, stats.full_mean, stats.full_covariance)
     return class_denoised - full_denoised
+
+
+def noise_alignment_delta(
+    x: torch.Tensor, t: torch.Tensor, target_class: int, stats: GaussianStats
+) -> torch.Tensor:
+    """Backward-compatible name for :func:`class_minus_full_delta`."""
+    return class_minus_full_delta(x, t, target_class, stats)
+
+
+def make_class_minus_full_velocity(
+    model: VelocityMLP,
+    stats: GaussianStats,
+    *,
+    target_class: int,
+    strength: float = 1.0,
+    start: float = 0.04,
+    end: float = 0.35,
+) -> VelocityFunction:
+    return add_class_minus_full_correction(
+        base_velocity(model),
+        stats,
+        target_class=target_class,
+        strength=strength,
+        start=start,
+        end=end,
+    )
 
 
 def make_noise_aligned_velocity(
@@ -679,14 +705,38 @@ def make_noise_aligned_velocity(
     start: float = 0.04,
     end: float = 0.35,
 ) -> VelocityFunction:
-    return add_noise_alignment(
-        base_velocity(model),
+    """Backward-compatible name for class-minus-full denoiser correction."""
+    return make_class_minus_full_velocity(
+        model,
         stats,
         target_class=target_class,
         strength=strength,
         start=start,
         end=end,
     )
+
+
+def add_class_minus_full_correction(
+    base_velocity_fn: VelocityFunction,
+    stats: GaussianStats,
+    *,
+    target_class: int,
+    strength: float = 1.0,
+    start: float = 0.04,
+    end: float = 0.35,
+) -> VelocityFunction:
+    """Add a gated target-class minus full-data denoiser correction."""
+
+    def guided_velocity(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            v = base_velocity_fn(t, x)
+            gate = window_gate(t, start, end).reshape(-1, 1)
+            remaining = (1.0 - expand_time(t, x)).clamp_min(0.04)
+            clean_delta = class_minus_full_delta(x, t, target_class, stats.to(x.device))
+            velocity_delta = float(strength) * gate * clean_delta / remaining
+            return v + velocity_delta
+
+    return guided_velocity
 
 
 def add_noise_alignment(
@@ -698,17 +748,15 @@ def add_noise_alignment(
     start: float = 0.04,
     end: float = 0.35,
 ) -> VelocityFunction:
-    """Apply noise alignment to any base velocity function."""
-    def guided_velocity(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            v = base_velocity_fn(t, x)
-            gate = window_gate(t, start, end).reshape(-1, 1)
-            remaining = (1.0 - expand_time(t, x)).clamp_min(0.04)
-            clean_delta = noise_alignment_delta(x, t, target_class, stats.to(x.device))
-            velocity_delta = float(strength) * gate * clean_delta / remaining
-            return v + velocity_delta
-
-    return guided_velocity
+    """Backward-compatible name for class-minus-full denoiser correction."""
+    return add_class_minus_full_correction(
+        base_velocity_fn,
+        stats,
+        target_class=target_class,
+        strength=strength,
+        start=start,
+        end=end,
+    )
 
 
 def class_log_probabilities(x: torch.Tensor, stats: GaussianStats) -> torch.Tensor:

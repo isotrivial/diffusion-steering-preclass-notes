@@ -16,18 +16,18 @@ coordinate.
 
 | # | Read with outputs | Main question |
 |---|---|---|
-| 00 | [Generative-model foundations](executed/00_diffusion_and_flow_matching_foundations.ipynb) | How do noising paths, velocities, denoisers, and samplers differ? |
-| 01 | [Unconditional flow matching](executed/01_train_unconditional_flow_matching.ipynb) | Can an unconditional MLP learn clusters, a continuous circle, and eight separated modes? |
-| 02 | [Denoisers and deterministic samplers](executed/02_denoisers_and_deterministic_samplers.ipynb) | Why is the velocity conversion a conditional clean estimate, and how do Euler, Heun, and RK4 compare? |
-| 03 | [Gaussian/PCA denoisers and noise alignment](executed/03_gaussian_denoisers_and_noise_alignment.ipynb) | Can Gaussian/PCA structure denoise MNIST pixels and provide coarse high-noise control? |
-| 04 | [Post-hoc objective-gradient guidance](executed/04_training_free_gradient_guidance.ipynb) | What does a state-dependent objective gradient gain, and what does online backpropagation cost? |
-| 05 | [Activation steering and method comparison](executed/05_activation_steering_and_method_comparison.ipynb) | When is class information readable in hidden features, and how do the steering methods compare? |
-| 06 | [Noise alignment in an unconditional CIFAR-10 EDM](executed/cifar10_steering_with_unconditional_edm.ipynb) | Does the high-noise distributional correction produce a measurable, class-specific image shift? |
+| 00 | [How does noise become a new sample?](executed/00_diffusion_and_flow_matching_foundations.ipynb) | Which roles belong to the path, learned field, and sampler? |
+| 01 | [Can local velocity predictions generate the whole distribution?](executed/01_train_unconditional_flow_matching.ipynb) | What do clusters, a circle, and eight modes reveal beyond the training loss? |
+| 02 | [Same field, different deterministic samplers](executed/02_denoisers_and_deterministic_samplers.ipynb) | What changes when Euler, Heun, and RK4 start from exactly the same noise? |
+| 03 | [From a Gaussian denoiser to a class-minus-full correction](executed/03_gaussian_denoisers_and_noise_alignment.ipynb) | Can PCA denoise MNIST pixels and provide coarse distributional control? |
+| 04 | [Objective-gradient guidance during sampling](executed/04_training_free_gradient_guidance.ipynb) | How do timing and strength change a state-dependent guidance field? |
+| 05 | [Does a readable hidden feature provide control?](executed/05_activation_steering_and_method_comparison.ipynb) | Why can a strong probe coexist with weak activation steering? |
+| 06 | [A class-minus-full correction in an unconditional CIFAR-10 EDM](executed/cifar10_steering_with_unconditional_edm.ipynb) | Does the toy mechanism produce a measurable class-specific image shift? |
 
 The links above always open the published notebooks with inline outputs. The
 same filenames one directory above are output-free implementation sources.
 
-The older source notebooks (`flow_matching_*.ipynb`) are retained as research
+The older exploratory notebooks are retained under `legacy/` as research
 provenance. They are not part of the pre-class reading sequence.
 
 Notebook `06` uses NVIDIA's unconditional CIFAR-10 EDM checkpoint and a
@@ -77,7 +77,7 @@ Do not use reduced training to draw experimental conclusions.
 
 ## Supporting files
 
-- `PRECLASS_NOTES.md`: scope, prerequisites, reading order, and discussion questions.
+- `PRECLASS_NOTES.md`: motivation, reading rhythm, and the argument across the series.
 - `BACKGROUND.md`: compact derivations and terminology.
 - `toy_notes.py`: shared implementation used by all six notebooks.
 - `scripts/build_toy_notes.py`: readable notebook cell source.

@@ -69,27 +69,26 @@ print("device:", device)
 NOTEBOOKS = {
     "00_diffusion_and_flow_matching_foundations.ipynb": [
         markdown(r'''
-# 00 - From noise to data: diffusion and flow-matching foundations
+# 00 - How does noise become a new sample?
 
-Every note in this series follows one question: how can a generator turn fresh
-noise into a new sample, and where can we intervene after training? We begin in
-two dimensions, where the data distribution, Gaussian source, learned velocity
-field, and numerical sampler can all be drawn. The model is unconditional:
-labels are withheld from its training input. Later steering signals will come
-from fitted class distributions, differentiable objectives, or hidden-feature
-directions, never from attraction to a chosen target point.
+The series follows one generator from training to post-hoc steering. We begin
+with the pieces that are easiest to confuse: the data distribution, random
+starting noise, the neural prediction, and the numerical sampler. In two
+dimensions all four can be drawn before we meet the same ideas in images.
 
-Python, vectors, and basic probability are enough background; no stochastic
-calculus is assumed.
+The model is unconditional: class labels are never given to its velocity
+network. Later notes use labels only to construct and evaluate controls after
+training.
+
+**Time convention for Notes 00--05:** `t=0` is noise and `t=1` is data.
 '''),
         code(SETUP),
         markdown(r'''
 ## 1. What is a generative model?
 
-A generative model learns a **sampling procedure**. It is given a finite set of
-training examples and learns how to create new samples with similar
-distribution-level structure. It does not simply return a stored training
-example.
+A generative model learns a **sampling procedure** from examples. A useful
+generator produces new samples with the structure of the training distribution
+rather than returning a stored example.
 
 For the flow model in these notes:
 
@@ -97,15 +96,20 @@ For the flow model in these notes:
 - a neural network learns a time-dependent velocity;
 - an ODE sampler follows that velocity from noise to a generated endpoint.
 
-The neural network alone is therefore not the complete generator. The source
-distribution, trained velocity model, and sampler work together. During
-generation, each fresh noise seed starts a new sample.
+The neural network alone is not the complete generator. The source
+distribution, trained model, and sampler work together.
+
+**Before you run:** In the diagram, which object is learned from data? Which
+object supplies the variation between generated samples?
 '''),
         code(r'''
 plot_generator_pipeline()
 '''),
         markdown(r'''
-### Unconditional, conditional, and post-hoc control
+The velocity network is learned. Fresh noise supplies different starting
+states, while the sampler turns each starting state into one endpoint.
+
+### Three ways to request control
 
 - An **unconditional** generator models all training examples without receiving
   a requested class. That is the model trained here.
@@ -114,20 +118,21 @@ plot_generator_pipeline()
 - **Post-hoc steering** keeps a trained generator frozen and modifies the
   sampling computation. Notebooks `03`--`05` study this third setting.
 
-Random noise is useful because it is easy to sample and supplies a different
-starting state for each output. A deterministic sampler can still generate a
-diverse collection: it maps different initial noise seeds to different
-endpoints.
+Post-hoc steering is the setting used later: the unconditional model remains
+frozen while the sampling computation is changed. A deterministic sampler can
+still generate a diverse collection because different initial noise points
+follow different deterministic trajectories.
 '''),
         markdown(r'''
-## 2. Why begin with a dataset we can see?
+## 2. What information does noise hide?
 
 A probability distribution describes which regions are likely and how often
 different kinds of samples occur. Images live in thousands or millions of
 dimensions, where that structure is difficult to draw. Here every sample has
 only two coordinates, so a large scatter plot makes cluster locations,
 frequencies, shapes, and spread directly visible. The three colors play the
-role of semantic classes.
+role of mixture-component labels. Later notes treat those labels as toy classes
+for steering and evaluation. The velocity model will not receive them.
 '''),
         code(r'''
 clean, labels = sample_labeled_mixture(2400, device=device)
@@ -137,7 +142,7 @@ ax.legend(frameon=False)
 plt.show()
 '''),
         markdown(r'''
-## 3. Forward noising
+## 3. One path, read in two directions
 
 First sample base noise, then use the linear path
 
@@ -150,7 +155,7 @@ $$x_t=(1-t)x_{noise}+t x_{data},\qquad s=1.8.$$
 - Lower `t` therefore means higher noise in this notebook series.
 
 A diffusion model learns to undo a noising process. Flow matching learns the
-velocity of a path between the same endpoints.
+velocity along a path between the same endpoints.
 
 ### Diffusion and flow matching in one table
 
@@ -159,17 +164,19 @@ velocity of a path between the same endpoints.
 | Diffusion model | noise, score, or a denoised estimate | repeatedly remove noise with a stochastic or deterministic sampler |
 | Flow-matching model | velocity along a chosen probability path | integrate an ODE from the source distribution to data |
 
-Both are time-dependent generative models. Here `t` indexes position along the
-noise-to-data path; it is not elapsed computer time. We use flow matching
-because the two-dimensional velocity arrows and complete trajectories are easy
-to draw, then connect the same ideas to diffusion denoisers and steering.
+Both are time-dependent generative models. Here `t` indexes a position along
+the noise-to-data path; it is not elapsed computer time.
+
+**Before you run:** As `t` increases from noise to data, which structure should
+become visible first: the exact identity of every point, or the coarse cluster
+layout? The same clean points and noise points are reused in every panel.
 '''),
         code(r'''
 set_seed(SEED)
 clean_small, labels_small = sample_labeled_mixture(1500, device=device)
 fixed_noise = sample_base(clean_small.shape[0], device=device)
 
-times = [1.0, 0.70, 0.35, 0.08]
+times = [0.08, 0.35, 0.70, 1.0]
 fig, axes = plt.subplots(1, len(times), figsize=(15, 3.8))
 for ax, t_value in zip(axes, times):
     t = torch.full((clean_small.shape[0], 1), t_value, device=device)
@@ -181,6 +188,14 @@ plt.tight_layout()
 plt.show()
 '''),
         markdown(r'''
+The coarse three-cluster layout appears before individual points reach their
+clean endpoints. This early-to-late change in available information will matter
+when we choose a steering window.
+
+**Change one thing:** Replace `0.35` in `times` with another value between zero
+and one. Rerun only the preceding cell and locate when the clusters first become
+easy to distinguish.
+
 ## 4. What flow matching predicts
 
 Choose a noise point `x_noise`, a data point `x_data`, and a time `t`. Along the
@@ -193,6 +208,10 @@ Training repeatedly asks a neural network to predict this arrow from only
 network learns an average velocity field, not a memorized arrow for each pair.
 The pair-specific target is available while constructing training examples but
 is not available during generation.
+
+**Before you run:** The arrows below come from individual endpoint pairs. If
+two different pairs pass through nearly the same state, can the network recover
+both pair-specific arrows from `(x_t,t)` alone?
 '''),
         code(r'''
 set_seed(SEED + 1)
@@ -206,6 +225,11 @@ target_velocity = x_data - x_noise
 plot_flow_matching_batch(x_noise, x_data, x_t, target_velocity)
 '''),
         markdown(r'''
+No. The network sees the state and time, not the hidden endpoint pair. Under
+mean-squared-error training it learns the conditional average of compatible
+pair velocities. Notebook `01` tests whether those local averages assemble into
+a useful global flow.
+
 ## 5. Why keep the model and sampler separate?
 
 Later we will change the numerical solver and add steering terms. Those changes
@@ -223,35 +247,28 @@ chosen at sampling time.
 
 In these notes, **generator** refers to the complete sampling procedure: base
 distribution + trained neural model + sampler. Replacing Euler with RK4 changes
-the sampler, not the learned model.
+only the sampler; the source distribution and learned velocity field remain the
+same.
 
-**Check your understanding**
-
-1. What is visible at high noise: exact class details or only coarse structure?
-2. Why is `x_data - x_noise` available during training but unavailable during generation?
-3. Which component changes when Euler is replaced by RK4: the trained model or the sampler?
-
-The key separation is now in place: the data define what must be learned, the
-base distribution supplies diverse starting points, the network predicts a
-local velocity, and the sampler turns those predictions into complete
-trajectories. None of this yet shows that the learned field works. Notebook
-`01` makes the construction concrete by training the velocity model and
-watching the same learning rule succeed, and sometimes fail, across clustered,
-curved, and many-mode distributions.
+Notebook `01` now supplies the missing piece: train the velocity field and ask
+whether accurate local predictions actually produce the whole data
+distribution.
 '''),
     ],
     "01_train_unconditional_flow_matching.ipynb": [
         markdown(r'''
-# 01 - Train an unconditional flow-matching model
+# 01 - Can local velocity predictions generate the whole distribution?
 
-Notebook `00` separated the source distribution, learned field, and sampler. We
-now train the learned part: a small unconditional MLP that predicts velocity
-along independently paired noise-to-data paths. The goal is not merely to lower
-a loss curve, but to see whether local velocity predictions assemble into a
-convincing global transport. We begin with three clusters, then reuse the same
-training idea on a noisy circle and eight separated modes so that curved
-support, missing modes, uneven occupancy, and incorrect spread become visible
-rather than hidden inside one score.
+Notebook `00` defined the training arrows. We now fit a small unconditional MLP
+and follow its learned field from fresh noise to generated samples. The central
+test is visual: a falling training loss is useful, but does it guarantee that
+the generated batch covers every mode with the right shape and frequency?
+
+Three clusters form the main experiment used throughout the steering notes. A
+circle and eight separated Gaussians appear later as short transfer checks for
+curved support and missing modes.
+
+**Time convention:** `t=0` is noise and `t=1` is data.
 '''),
         code(SETUP),
         markdown(r'''
@@ -270,6 +287,9 @@ For each minibatch:
 
 This is I-CFM. It is not optimal-transport CFM because we do not solve an
 optimal coupling between noise and data samples.
+
+**Before you run:** Predict which claim a low minibatch loss supports directly:
+accurate sampled training arrows, correct generated mode frequencies, or both.
 '''),
         code(r'''
 def train_visible_flow(model, steps):
@@ -293,13 +313,17 @@ def train_visible_flow(model, steps):
     model.eval()
     return losses
 
-model, losses, trained_now = load_or_train_model(device=device, trainer=train_visible_flow)
-print("trained now:", trained_now, "| parameters:", sum(p.numel() for p in model.parameters()))
+model, losses, _ = load_or_train_model(device=device, trainer=train_visible_flow)
+print("trainable parameters:", sum(p.numel() for p in model.parameters()))
 '''),
         code(r'''
 plot_loss_curve(losses, title="Flow-matching training loss")
 '''),
         markdown(r'''
+The loss measures sampled velocity targets. It does not directly count modes
+or compare generated endpoints with data, so generation must be checked by
+actually integrating the field.
+
 ## 2. How does a fitted field become samples?
 
 Once an initial noise batch is fixed, the ODE sampler is deterministic:
@@ -307,6 +331,10 @@ Once an initial noise batch is fixed, the ODE sampler is deterministic:
 $$\frac{dx}{dt}=v_\theta(t,x), \qquad x(0)=x_{noise}.$$
 
 We use Heun's method here. Notebook `02` compares it with Euler and RK4.
+
+**Before you run:** At early times, should particles already be separated by
+their eventual destination, or can the partition emerge gradually? Colors in
+the snapshot figure will be assigned from final endpoints, after generation.
 '''),
         code(r'''
 set_seed(SEED + 10)
@@ -316,6 +344,7 @@ generated = trajectory[-1].to(device)
 target, target_labels = sample_labeled_mixture(3000, device=device)
 
 plot_flow_endpoints(x0_eval, target, target_labels, generated)
+plot_flow_snapshots(trajectory, generated, target, target_labels)
 print(f"sampling time: {sample_seconds:.3f} s")
 '''),
         code(r'''
@@ -323,13 +352,14 @@ diagnostics = pd.DataFrame(flow_endpoint_diagnostics(generated, target, target_l
 display(diagnostics.round(4))
 '''),
         markdown(r'''
-### Why use Wasserstein distance in addition to a plot?
+### Why use an empirical Wasserstein matching distance in addition to a plot?
 
-A class rate or a mean checks only one property. Wasserstein distance asks for
-the cheapest way to match generated points to target points, where moving a
-point farther costs more. The code uses equal-size deterministic subsets and
-reports the mean matched distance. It is a finite-sample estimate, not the
-unknown population distance.
+The time snapshots show one learned map, while the endpoint panel reveals
+whether its final distribution resembles the data. A class rate or mean checks
+only one property. The empirical Wasserstein matching below finds a minimum-cost
+one-to-one matching between equal-size sample subsets and reports their mean
+distance. It is a finite-sample diagnostic, not the unknown population
+population Wasserstein distance.
 
 The lines below make the definition literal. Lower is better. We still inspect
 mode coverage and spread because one scalar cannot diagnose every failure.
@@ -341,13 +371,16 @@ _ = plot_wasserstein_matching(generated, target)
 plot_velocity_field(model, device)
 '''),
         markdown(r'''
-## 3. Does the method learn a curved distribution?
+## 3. Transfer check: does the same rule learn a curve?
 
 Three Gaussian clusters could leave the impression that flow matching only
 learns a few destination centers. A noisy circle is a stricter visual test: it
 has continuously many valid endpoints and a thin curved support. We train a
 separate unconditional model and ask whether it forms the ring without leaving
 large angular gaps.
+
+**Before you run:** A low radial error is not enough to reproduce a circle.
+What additional failure would appear as a large empty arc?
 '''),
         code(r'''
 circle = run_flow_case(
@@ -359,10 +392,15 @@ circle = run_flow_case(
 plot_circle_flow(circle)
 '''),
         code(r'''
-display(pd.DataFrame(circle_flow_metrics(circle)).round(4))
+circle_metrics = pd.DataFrame(circle_flow_metrics(circle))
+display(circle_metrics[circle_metrics["diagnostic"].isin([
+    "generated radial MAE",
+    "angular occupancy total variation",
+    "generated-to-target empirical matching distance",
+])].round(4))
 '''),
         markdown(r'''
-## 4. Why also inspect eight separated modes?
+## 4. Transfer check: can one flow cover eight modes?
 
 The three-class model is kept for the steering notebooks because its labels are
 easy to discuss, while the circle tests continuous curved geometry. Eight narrow
@@ -373,6 +411,10 @@ destination center is used by the sampler.
 We color each particle by the component nearest to its **final** endpoint, then
 trace the same particle backward through stored time slices. The colors are for
 reading the map after sampling; the model never receives them.
+
+**Before you run:** Could a model produce convincing points near seven centers
+and still have a moderate average distance to the full target? Look for both
+coverage and occupancy in the result.
 '''),
         code(r'''
 balanced_labels = torch.arange(8, device=device).repeat_interleave(512)
@@ -389,7 +431,6 @@ plot_eight_gaussian_flow(eight_modes)
 '''),
         code(r'''
 eight_summary, per_mode = eight_gaussian_metrics(eight_modes)
-display(pd.DataFrame(per_mode).round(3))
 display(pd.DataFrame(eight_summary).round(4))
 '''),
         markdown(r'''
@@ -399,103 +440,43 @@ within-mode spread. No single plot or scalar captures every mismatch between
 the generated and target distributions.
 '''),
         markdown(r'''
-## From a trained field to a denoised estimate
+## What carries forward?
 
-**Questions**
+The circle and eight-mode cases are transfer checks, not new storylines. They
+show why we inspect trajectories, coverage, occupancy, and spread rather than
+trusting one training loss or one distance.
 
-1. Why can a low minibatch MSE coexist with visibly poor samples?
-2. What information about class identity did the unconditional model receive?
-3. At which time does the vector field mostly choose coarse destination modes?
+The remaining toy notes return to the same three-cluster checkpoint. Notebook
+`02` holds that model and its initial noise fixed, then asks how much of a
+generated endpoint is determined by the learned field and how much by the
+numerical solver.
 
-These examples show why training loss is only the beginning of the story. The
-circle and eight-mode models are diagnostic detours: they reveal
-curved-support and occupancy failures, while the remaining toy notes return to
-the three-cluster model for class-level steering. With one trained field in
-hand, Notebook `02` asks how to read its prediction as a denoised estimate and
-how faithfully different deterministic solvers follow the same field.
+**Change one thing:** In the main sampling cell, replace `steps=80` with
+`steps=12` and rerun only the endpoint and snapshot cells. The model is
+unchanged; any new distortion comes from following the same field more
+coarsely.
 '''),
     ],
     "02_denoisers_and_deterministic_samplers.ipynb": [
         markdown(r'''
-# 02 - Denoisers and deterministic samplers
+# 02 - Same field, different deterministic samplers
 
-Notebook `01` gave us a trained velocity field, but the steering methods that
-follow are easier to describe as changes to a clean-data estimate. For the
-linear I-CFM path, these are two views of the same learned prediction: velocity
-describes how the current state should move, while
-$D_\theta(x_t,t)=x_t+(1-t)v_\theta(x_t,t)$ estimates the clean endpoint
-compatible with that state. After deriving this bridge, we reuse the same
-initial noise to compare Euler, Heun, and RK4, separating errors in numerical
-integration from errors in the learned field.
+Notebook `01` trained one velocity field. We now freeze that field and ask two
+questions. First, how closely do Euler, Heun, and RK4 follow it? Second, how can
+the same velocity prediction be read as an estimate of clean data?
+
+Keeping the model and initial noise fixed makes both questions concrete. A
+solver changes the numerical path. The denoiser conversion changes how we read
+the model's prediction, not what the model learned.
+
+**Time convention:** `t=0` is noise and `t=1` is data.
 '''),
         code(SETUP),
         code(r'''
 model, losses, _ = load_or_train_model(device=device)
 '''),
         markdown(r'''
-## 1. Why can a velocity prediction be read as a denoiser?
-
-Start with one exact training pair. Along the linear conditional path,
-
-$$x_t=x_{noise}+t(x_{data}-x_{noise}).$$
-
-Its pair-specific velocity is $u=x_{data}-x_{noise}$. Rearranging the path gives
-
-$$x_{data}=x_t+(1-t)u.$$
-
-This first identity is exact because the two endpoints are known while we build
-a training example. During generation the network sees only $(x_t,t)$, not
-those endpoints. Mean-squared-error training therefore learns the conditional
-average
-
-$$v^*(x_t,t)=\mathbb E[u\mid x_t,t].$$
-
-Substituting that average into the exact identity gives
-
-$$D^*(x_t,t)=x_t+(1-t)v^*(x_t,t)
-=\mathbb E[x_{data}\mid x_t,t].$$
-
-For the trained network we use the same conversion:
-
-$$D_\theta(x_t,t)=x_t+(1-t)v_\theta(x_t,t).$$
-
-The result is the best mean-squared-error clean estimate under the training
-pair distribution. It is an average over plausible clean endpoints, not a
-guarantee that the model has identified one hidden original. When several modes
-are plausible, the average can sit between them; in images, such averaging can
-look blurry.
-
-Away from $t=1$, the conversion can also be inverted as
-$v_\theta=(D_\theta-x_t)/(1-t)$. Near $t=1$ that division is poorly conditioned,
-so code should not use it exactly at the endpoint. This dependence on the
-chosen linear path is important: a different path has different conversion
-factors.
-'''),
-        code(r'''
-set_seed(SEED + 19)
-visual_clean, visual_labels = sample_labeled_mixture(180, device=device)
-visual_noise = sample_base(180, device=device)
-visual_t_value = 0.35
-visual_t = torch.full((180,), visual_t_value, device=device)
-visual_xt = forward_noising(visual_clean, visual_t, visual_noise)
-pair_velocity = visual_clean - visual_noise
-with torch.no_grad():
-    learned_velocity = model(visual_t, visual_xt)
-    clean_estimate = visual_xt + (1 - visual_t[:, None]) * learned_velocity
-
-plot_velocity_to_denoiser(
-    visual_xt, pair_velocity, learned_velocity, clean_estimate, visual_clean,
-    t_value=visual_t_value,
-)
-'''),
-        code(r'''
-set_seed(SEED + 20)
-clean, _ = sample_labeled_mixture(450, device=device)
-noise = sample_base(clean.shape[0], device=device)
-plot_denoiser_times(model, clean, noise)
-'''),
-        markdown(r'''
-## 2. Solver comparison
+## 1. What does deterministic mean here?
 
 The model defines the arrows; the solver decides how to follow them. A fair
 solver comparison changes only the solver and step count. It keeps the model,
@@ -505,8 +486,13 @@ Deterministic is conditional on the initial state: repeating the same
 `x_noise` repeats the trajectory, while different initial noise points can
 still produce a diverse batch of endpoints.
 
-We use a 256-step RK4 trajectory as a numerical reference. This reference does
-not remove model error; it only makes solver error small.
+We use a 256-step RK4 trajectory as a numerical reference. This does not remove
+model error; it only makes the numerical integration error small.
+
+**Before you run:** Euler uses one model evaluation per step, Heun uses two, and
+RK4 uses four. At a fixed number of steps, which should follow a curved field
+most accurately? At a fixed number of model evaluations, is the answer
+necessarily the same?
 '''),
         code(r'''
 def euler_step(velocity, t, x, dt):
@@ -527,6 +513,8 @@ def integrate_with_step(velocity, x0, steps, step_fn):
         x = step_fn(velocity, t, x, dt).detach()
         path.append(x.cpu())
     return torch.stack(path)
+
+STEP_COUNTS = [8, 16, 32, 64]
 '''),
         code(r'''
 set_seed(SEED + 21)
@@ -537,9 +525,9 @@ velocity = base_velocity(model)
 reference_path = integrate_ode(velocity, x0, steps=256, method="rk4")
 paths = {}
 for name, step_fn in {"euler": euler_step, "heun": heun_step}.items():
-    for steps in [8, 16, 32, 64]:
+    for steps in STEP_COUNTS:
         paths[(name, steps)] = integrate_with_step(velocity, x0, steps, step_fn)
-for steps in [8, 16, 32, 64]:
+for steps in STEP_COUNTS:
     paths[("rk4", steps)] = integrate_ode(velocity, x0, steps=steps, method="rk4")
 
 rows, saved_paths = solver_metrics_from_paths(paths, reference_path[-1], target)
@@ -552,50 +540,104 @@ plt.show()
 plot_solver_accuracy(solver_table)
 '''),
         markdown(r'''
-## 3. Two meanings that must remain separate
+The paired endpoint error is meaningful because every solver starts from the
+same tensor. A more accurate solver follows the learned field more faithfully;
+it cannot repair a poorly learned field.
 
-**Paired initial noise** is an experimental control. With a deterministic
-sampler, the same initial tensor gives sample-by-sample correspondence between
-two methods. Endpoint differences can then be attributed to the changed method.
+**Change one thing:** Replace `STEP_COUNTS` with `[4, 8, 16]`. Rerun the solver
+cells and find the smallest computation budget at which the generated modes
+remain recognizable.
 
-**Noise alignment in NA-RFM** is a steering method. It uses the difference
-between a target-class PCA denoiser and a full-data PCA denoiser during the
-high-noise window. Notebook `03` implements that mechanism in 2D.
+## 2. How can velocity be read as a clean estimate?
 
-Using the same seed does not implement NA-RFM noise alignment. Conversely, a
-noise-alignment experiment should still use paired initial noise for fair
-evaluation.
+For one known training pair,
 
-**Questions**
+$$x_t=x_{noise}+t(x_{data}-x_{noise}),\qquad
+u=x_{data}-x_{noise}.$$
 
-1. Why does RK4 usually need fewer steps but more model evaluations per step?
-2. Why is endpoint RMSE meaningful only because every solver starts from the exact same tensor?
-3. Does a more accurate ODE solver guarantee a better trained vector field?
+Rearranging gives the exact identity
 
-A deterministic sampler gives us more than reproducibility: when two methods
-start from the same initial noise, their trajectories are paired sample by
-sample, so the resulting differences can be attributed to the changed sampling
-rule rather than to luck. That pairing is an evaluation tool, not the steering
-method called noise alignment. Notebook `03` now uses the denoiser view itself
-to construct a class-level correction from two fitted distributions, target
-class minus full data, while the trajectory is still highly noisy.
+$$x_{data}=x_t+(1-t)u.$$
+
+During generation the endpoint pair is unknown, so the network substitutes its
+learned velocity for `u`:
+
+$$D_\theta(x_t,t)=x_t+(1-t)v_\theta(x_t,t).$$
+
+**Before you run:** At `t=0.35`, should this estimate recover each hidden clean
+endpoint exactly, or average over several endpoints compatible with the same
+noisy state?
+'''),
+        code(r'''
+set_seed(SEED + 19)
+visual_clean, visual_labels = sample_labeled_mixture(180, device=device)
+visual_noise = sample_base(180, device=device)
+visual_t_value = 0.35
+visual_t = torch.full((180,), visual_t_value, device=device)
+visual_xt = forward_noising(visual_clean, visual_t, visual_noise)
+pair_velocity = visual_clean - visual_noise
+with torch.no_grad():
+    learned_velocity = model(visual_t, visual_xt)
+    clean_estimate = visual_xt + (1 - visual_t[:, None]) * learned_velocity
+
+plot_velocity_to_denoiser(
+    visual_xt, pair_velocity, learned_velocity, clean_estimate, visual_clean,
+    t_value=visual_t_value,
+)
+'''),
+        markdown(r'''
+The exact pair velocity recovers its paired endpoint because both endpoints were
+used to construct it. The network sees only `(x_t,t)`. With mean-squared-error
+training, the population prediction is a conditional average,
+
+$$v^*(x_t,t)=\mathbb E[u\mid x_t,t],$$
+
+so the converted estimate is
+
+$$D^*(x_t,t)=\mathbb E[x_{data}\mid x_t,t].$$
+
+It is a posterior mean, not a reconstruction of one secretly known original.
+The full derivation and the endpoint caveat are in `BACKGROUND.md`.
+'''),
+        code(r'''
+set_seed(SEED + 20)
+clean, _ = sample_labeled_mixture(450, device=device)
+noise = sample_base(clean.shape[0], device=device)
+plot_denoiser_times(model, clean, noise)
+'''),
+        markdown(r'''
+## 3. Keep two uses of noise separate
+
+A **same-seed paired comparison** is an evaluation design: two deterministic
+methods start from the exact same noise tensor, so endpoint differences can be
+attributed to the changed sampling rule.
+
+Notebook `03` introduces a steering signal formed by subtracting a full-data
+denoiser from a target-class denoiser. We will call it the
+**class-minus-full denoiser correction** and show the subtraction explicitly.
+It is unrelated to reusing a seed.
+
+Notebook `03` begins with a visible question: can a denoiser built only from a
+mean and principal directions recover useful structure from noisy MNIST
+images?
 '''),
     ],
     "03_gaussian_denoisers_and_noise_alignment.ipynb": [
         markdown(r'''
-# 03 - Class steering with Gaussian/PCA denoisers
+# 03 - From a Gaussian denoiser to a class-minus-full correction
 
 Notebook `02` showed that a velocity model can also be read as a denoiser. We
-now ask whether a simpler denoiser, built only from a distribution's mean and
-principal directions, can supply useful class information while the sample is
-still dominated by noise. We first test Gaussian/PCA posterior means on
-held-out MNIST images, then compare a target-class denoiser with a full-data
-denoiser at the same 2D state. Their difference,
+now ask whether a much simpler denoiser, built only from a distribution's mean
+and principal directions, can recover useful structure. We first test that
+question on held-out MNIST images. We then compare a target-class denoiser with
+a full-data denoiser at the same 2D state. Their difference,
 
 $$\Delta D = D_{\text{target}} - D_{\text{full}},$$
 
-is a coarse distribution-level correction. It does not pull the sample toward
-a chosen image, centroid, or coordinate.
+is a coarse distribution-level correction, not a vector toward a selected
+sample.
+
+**Time convention:** `t=0` is noise and `t=1` is data.
 '''),
         code(SETUP),
         code(r'''
@@ -615,36 +657,16 @@ target_reference = sample_class(1800, TARGET_CLASS, device=device)
 print("target class:", CLASS_NAMES[TARGET_CLASS])
 '''),
         markdown(r'''
-## 1. Why a Gaussian denoiser makes sense at high noise
+## 1. A denoiser built from means and principal directions
 
-Write the base point as $x_{noise}=s\epsilon$ with
-$\epsilon\sim\mathcal{N}(0,I)$ and `s=1.8`, then divide the path by `t`:
+A Gaussian model records a mean and covariance. In PCA coordinates, the
+covariance tells us which directions vary strongly across clean examples. A
+Gaussian posterior mean preserves evidence along those high-variance
+directions and shrinks uncertain low-variance directions toward the mean.
 
-$$\frac{x_t}{t}=x_{data}+s\frac{1-t}{t}\epsilon.$$
-
-The right side is clean data plus Gaussian noise with effective noise level
-`sigma_eff=s(1-t)/t`. For a Gaussian data model, the posterior mean is
-
-$$D(y,\sigma)=\mu+C(C+\sigma^2I)^{-1}(y-\mu).$$
-
-If $C=U\Lambda U^\top$, each principal-component coordinate is multiplied by
-$\lambda_i/(\lambda_i+\sigma^2)$. Large-variance directions survive; uncertain
-small-variance directions shrink toward the mean. This is why PCA is a useful
-way to compute the same rule for images.
-
-The factor `s` matters because our base distribution is not unit variance.
-At high noise the denoiser trusts coarse mean/covariance statistics; at low noise
-it stays close to the observed point.
-
-The full-data Gaussian is deliberately crude because the complete dataset is a
-mixture. That limitation is useful: subtracting the full denoiser from the
-target-class denoiser isolates a coarse class correction.
-
-[Li, Dai, and Qu (NeurIPS 2024)](https://arxiv.org/abs/2410.24060) provide
-broader evidence that learned diffusion denoisers can approach empirical
-Gaussian denoisers in a generalization regime. The MNIST calculation below is
-our teaching example; Notebook `06` supplies the pretrained image-generator
-experiment for this series.
+The next two functions implement the same rule once with a full covariance
+matrix and once in a low-rank PCA basis. The image result comes first; the
+formula that explains it follows immediately afterward.
 '''),
         code(r'''
 def gaussian_posterior_mean(y, sigma, mean, covariance):
@@ -667,13 +689,17 @@ def pca_posterior_mean(y, sigma, stats):
     return stats.mean + (coordinates * shrinkage) @ stats.components.T
 '''),
         markdown(r'''
-## 2. Does a covariance model retain useful image structure?
+## 2. Can this simple model recover a noisy digit?
 
 MNIST makes all 784 pixel coordinates visible without needing a large network.
 We fit low-rank Gaussian models on the training split only: one to all digits
 and one to digit 3. The leading covariance directions are `eigendigits`.
-On held-out test images, we add known Gaussian noise and compare the noisy input
-with both posterior-mean denoisers.
+On held-out test images, we first check that the full-data model reduces error
+across all ten digits. We then compare both posterior-mean denoisers on digit 3.
+
+**Before you run:** The all-digit model has more training images, while the
+digit-3 model has a more specific prior. Which should better recover a held-out
+3 at this noise level? Which is more likely to erase unusual handwriting?
 '''),
         code(r'''
 MNIST_TARGET = 3
@@ -706,10 +732,26 @@ print("PCA rank:", MNIST_RANK)
 plot_pca_components(mnist_full_gaussian, mnist_class_gaussian)
 '''),
         code(r'''
+balanced_indexes = torch.cat([
+    torch.where(mnist_test_labels == digit)[0][:64]
+    for digit in range(10)
+])
+balanced_clean = mnist_test_images[balanced_indexes]
+set_seed(SEED + 332)
+balanced_noisy = balanced_clean + MNIST_SIGMA * torch.randn_like(balanced_clean)
+balanced_denoised = pca_posterior_mean(
+    balanced_noisy, MNIST_SIGMA, mnist_full_gaussian,
+)
+display(pd.Series({
+    "noisy MSE, all digits": float(torch.mean((balanced_noisy - balanced_clean).square())),
+    "full-data PCA MSE, all digits": float(torch.mean((balanced_denoised - balanced_clean).square())),
+}).round(4))
+'''),
+        code(r'''
 held_out_pool = torch.where(mnist_test_labels == MNIST_TARGET)[0]
 held_out_indexes = held_out_pool[:256]
 mnist_clean = mnist_test_images[held_out_indexes]
-set_seed(SEED + 332)
+set_seed(SEED + 333)
 mnist_noisy = mnist_clean + MNIST_SIGMA * torch.randn_like(mnist_clean)
 mnist_full_denoised = pca_posterior_mean(mnist_noisy, MNIST_SIGMA, mnist_full_gaussian)
 mnist_class_denoised = pca_posterior_mean(mnist_noisy, MNIST_SIGMA, mnist_class_gaussian)
@@ -737,13 +779,56 @@ plot_image_rows([
 ], title="Gaussian/PCA posterior means on held-out digit-3 images")
 '''),
         markdown(r'''
-## 3. How does denoising become a steering signal?
+The class-specific model usually removes more noise from typical 3s, but its
+stronger prior can also suppress atypical details. The images make the trade-off
+visible before we write it algebraically.
+
+## 3. What rule produced those images?
+
+Write the base point as $x_{noise}=s\epsilon$, with
+$\epsilon\sim\mathcal{N}(0,I)$ and `s=1.8`. For `t>0`, divide the linear path by
+`t`:
+
+$$y=\frac{x_t}{t}=x_{data}+\sigma_{eff}\epsilon,\qquad
+\sigma_{eff}=s\frac{1-t}{t}.$$
+
+The flow state has become an ordinary additive-noise observation. Under a
+Gaussian data model with mean $\mu$ and covariance $C$, its posterior mean is
+
+$$D(y,\sigma)=\mu+C(C+\sigma^2I)^{-1}(y-\mu).$$
+
+In a principal direction with variance $\lambda_i$, the observed coordinate is
+multiplied by $\lambda_i/(\lambda_i+\sigma^2)$. High-variance structure is
+retained more strongly; uncertain directions shrink more. The factor `s` is
+required because the toy base distribution is not unit variance.
+'''),
+        code(r'''
+plot_pca_shrinkage(mnist_class_gaussian)
+'''),
+        markdown(r'''
+The curves show the rule without a matrix inverse: as noise increases, every
+observation coordinate receives less weight, but high-variance principal
+directions retain influence longer.
+
+[Li, Dai, and Qu (NeurIPS 2024)](https://arxiv.org/abs/2410.24060) provide
+broader evidence connecting diffusion denoisers with empirical Gaussian
+denoisers in a generalization regime. Our MNIST panel is a small teaching test,
+not a reproduction of that paper.
+
+**Change one thing:** Set `MNIST_SIGMA` to `0.25` or `0.70` and rerun the MNIST
+cells. Compare how much the observation and the class prior control the output.
+
+## 4. How does denoising become a steering signal?
 
 The image example shows what one Gaussian posterior mean preserves and loses.
 For steering, we compare two such estimates at the same noisy state. Their
-difference asks for class-level structure that the target model favors more
-than the full-data model. The gate below limits that correction to the
-high-noise part of the trajectory.
+difference asks for structure favored by the target-class distribution relative
+to the broad distribution. The gate below limits that correction to the
+high-noise part of the trajectory. This literal subtraction is the mechanism
+called **noise alignment** in the paper.
+
+**Before you run:** Should the arrows point toward one common coordinate, or
+change with the local state because two posterior means are being compared?
 '''),
         code(r'''
 grid_1d = torch.linspace(-4.5, 4.5, 19, device=device)
@@ -762,20 +847,24 @@ D_full = gaussian_posterior_mean(
 )
 denoiser_delta = D_target - D_full
 
-plot_noise_alignment_field(
+plot_class_minus_full_field(
     grid, denoiser_delta, steering_data, steering_labels,
     target_class=TARGET_CLASS, t_value=t_value, start=0.04, end=0.35,
 )
 '''),
         markdown(r'''
-## 4. Does the correction improve paired samples?
+## 5. Does the correction improve paired samples?
 
 All methods below use the same initial noise, Heun solver, step count, and target
-reference. The only change is the noise-alignment strength. The correction is
-active for `t in [0.04, 0.35]`, the high-noise part of our noise-to-data path.
+reference. The only change is the class-minus-full correction strength. The
+correction is active for `t in [0.04, 0.35]`, the high-noise part of our
+noise-to-data path.
+
+**Before you run:** Increasing strength should move more samples toward the
+target class. Must target fit and diversity improve monotonically as well?
 '''),
         code(r'''
-def noise_aligned_velocity(strength):
+def class_minus_full_velocity(strength):
     def velocity(t, x):
         with torch.no_grad():
             base = model(t, x)
@@ -797,69 +886,75 @@ def noise_aligned_velocity(strength):
         code(r'''
 set_seed(SEED + 30)
 x0 = sample_base(1800, device=device)
-strengths = [0.0, 0.4, 0.8, 1.2, 1.6]
+CORRECTION_STRENGTH = 1.6
+strengths = [0.0, 0.8, CORRECTION_STRENGTH]
 methods = {"baseline": base_velocity(model)}
-methods.update({f"noise alignment {s:.1f}": noise_aligned_velocity(s) for s in strengths})
+methods.update({
+    f"class-minus-full {s:.1f}": class_minus_full_velocity(s)
+    for s in strengths
+})
 
 rows, paths = compare_steering_methods(
     methods, x0, target_reference, evaluation_stats,
     target_class=TARGET_CLASS, steps=64,
 )
-noise_alignment_table = pd.DataFrame(rows)
-noise_alignment_table["strength"] = [
+correction_table = pd.DataFrame(rows)
+correction_table["strength"] = [
     np.nan if name == "baseline" else float(name.rsplit(" ", 1)[-1])
-    for name in noise_alignment_table["method"]
+    for name in correction_table["method"]
 ]
-display(noise_alignment_table.round(4))
 '''),
         code(r'''
-plot_noise_alignment_comparison(
-    paths, noise_alignment_table, target_reference, evaluation_stats, strength=1.6,
+plot_class_minus_full_comparison(
+    paths, correction_table, target_reference, evaluation_stats,
+    strength=CORRECTION_STRENGTH,
 )
 '''),
         code(r'''
-selected = noise_alignment_table.set_index("method").loc[
-    ["baseline", "noise alignment 1.6"],
+selected = correction_table.set_index("method").loc[
+    ["baseline", f"class-minus-full {CORRECTION_STRENGTH:.1f}"],
     ["target_rate", "target_wasserstein", "mean_error", "diversity_ratio"],
 ]
-display(selected.round(4))
+display(selected.rename(columns={
+    "target_rate": "target-class rate",
+    "target_wasserstein": "empirical matching distance",
+    "mean_error": "target mean error",
+    "diversity_ratio": "diversity ratio",
+}).round(4))
 '''),
         markdown(r'''
 ## Reading the paired result
 
 Read the endpoints and metrics together. A higher target-class rate indicates
-stronger control, a lower Wasserstein distance indicates better agreement with
-target examples, and the diversity ratio shows whether that gain came from
-collapse or excessive spread. The model remains unconditional and unchanged;
-only the target-class and full-data summary statistics are prepared offline.
-In 2D both principal directions are retained, while an image implementation
-uses a low-rank PCA covariance model.
+stronger control, a lower empirical matching distance indicates better
+agreement with target examples, and the diversity ratio shows whether that
+gain came from collapse or excessive spread. The diversity ratio is the total
+coordinate variance of the generated batch divided by that of target-class
+examples: `1` matches their overall scale, values below `1` are too narrow, and
+large values remain too broad. The model remains unconditional and unchanged;
+only the target-class and full-data statistics are fitted offline.
 
-**Questions**
-
-1. Why should this coarse correction be most useful at high noise?
-2. Which strength best balances target rate and target Wasserstein distance in your run?
-3. What information is lost when a multimodal full dataset is approximated by one Gaussian?
-
-In this toy setting, the class-minus-full Gaussian correction produces partial
-coarse steering by a frozen unconditional model; it does not recover a full
-class-conditional distribution. Because means and covariances can express only
-limited structure, Notebook `04` replaces those fixed summaries with the
-gradient of a differentiable class objective.
+The useful signal is coarse because one mean and covariance cannot represent
+every detail of a multimodal distribution. In this toy setting it produces
+partial steering, not a full class-conditional generator. Notebook `04` asks
+what changes when a state-dependent objective gradient replaces those fixed
+summary statistics.
 '''),
     ],
     "04_training_free_gradient_guidance.ipynb": [
         markdown(r'''
-# 04 - Post-hoc objective-gradient guidance
+# 04 - Objective-gradient guidance during sampling
 
-Gaussian/PCA noise alignment is efficient because its correction can be
-computed with forward passes and small linear operations, but it can use only
-the structure captured by fitted means and covariances. A differentiable class
-objective offers a more adaptive alternative: at each active sampling state,
-its gradient points toward the local change that would raise the target score
-of the model's denoised estimate. The generator remains frozen, and the
-direction is not aimed at a preset point, but obtaining it requires
-backpropagation through the denoiser during sampling.
+The class-minus-full correction uses fixed means and covariances. A
+differentiable class objective can instead produce a direction that changes
+with the current state. The generator remains frozen, but every active solver
+evaluation now requires a backward pass through its denoised estimate.
+
+This notebook asks two questions that a final target rate alone cannot answer:
+when is the gradient informative, and what is lost when guidance becomes too
+strong?
+
+**Time convention:** `t=0` is noise and `t=1` is data.
 '''),
         code(SETUP),
         code(r'''
@@ -876,7 +971,13 @@ sampling we first compute the model's denoised estimate `D_theta(x_t,t)`, then
 differentiate `log p(target | D_theta)` with respect to the current state.
 
 This is not a vector toward a preset coordinate. It is the gradient of a
-class-level objective and changes with the state and time.
+class-level objective and changes with the state and time. The implementation
+normalizes each gradient before adding it, so the direction comes from the
+objective while the chosen guidance strength sets the update size. A higher
+class score alone does not guarantee a realistic endpoint.
+
+**Before you run:** On the contour plot, should a gradient arrow point along a
+level curve or across it? What happens to the gradient near a local maximum?
 '''),
         code(r'''
 grid_1d = torch.linspace(-4.5, 4.5, 80, device=device)
@@ -903,16 +1004,22 @@ ax.set_aspect("equal")
 plt.show()
 '''),
         markdown(r'''
-## 2. Compare forward-only and backward-pass guidance
+## 2. When should the gradient be used?
 
-All methods again share the exact same initial noise. Gradient guidance is
-active over the middle/late window, where the denoised estimate is informative.
-The Gaussian/PCA method is active only at high noise.
+At very high noise, the denoised estimate carries little class information. At
+later times it is more informative, but an aggressive edit can damage a nearly
+formed sample. We compare an early window, a broad middle/late window, and an
+overly strong version of that broad window. Every method starts from the exact
+same noise tensor.
+
+**Before you run:** Predict which failure each setting is most likely to show:
+an uninformative early signal, useful class movement, or reduced diversity from
+excessive guidance.
 '''),
         code(r'''
-def gradient_guided_velocity(strength):
+def gradient_guided_velocity(strength, start, end):
     def velocity(t, x):
-        gate = window_gate(t, 0.15, 0.92)[:, None]
+        gate = window_gate(t, start, end)[:, None]
         if gate.max() == 0:
             return model(t, x).detach()
 
@@ -934,25 +1041,26 @@ target_reference = sample_class(1200, TARGET_CLASS, device=device)
 
 methods = {
     "baseline": base_velocity(model),
-    "PCA/Gaussian, forward only": make_noise_aligned_velocity(
+    "class-minus-full": make_class_minus_full_velocity(
         model, stats, target_class=TARGET_CLASS, strength=1.6
     ),
-    "gradient 1.5": gradient_guided_velocity(1.5),
-    "gradient 3.0": gradient_guided_velocity(3.0),
+    "gradient, early": gradient_guided_velocity(3.0, 0.02, 0.25),
+    "gradient, middle/late": gradient_guided_velocity(3.0, 0.15, 0.92),
+    "gradient, too strong": gradient_guided_velocity(6.0, 0.15, 0.92),
 }
 
 rows, paths = compare_steering_methods(
     methods, x0, target_reference, stats, target_class=TARGET_CLASS, steps=48,
 )
 gradient_table = pd.DataFrame(rows)
-display(gradient_table.round(4))
 '''),
         code(r'''
 plot_trajectory_comparison(
     {
         "baseline": paths["baseline"],
-        "PCA/Gaussian": paths["PCA/Gaussian, forward only"],
-        "gradient": paths["gradient 3.0"],
+        "early gradient": paths["gradient, early"],
+        "middle/late gradient": paths["gradient, middle/late"],
+        "too strong": paths["gradient, too strong"],
     },
     target_reference=target_reference[:700],
 )
@@ -960,7 +1068,14 @@ plt.show()
 
 relative = gradient_table.copy()
 relative["runtime / baseline"] = relative["seconds"] / relative.loc[0, "seconds"]
-display(relative[["method", "target_rate", "target_wasserstein", "diversity_ratio", "runtime / baseline"]].round(3))
+display(relative[[
+    "method", "target_rate", "target_wasserstein", "diversity_ratio",
+    "runtime / baseline",
+]].rename(columns={
+    "target_rate": "target-class rate",
+    "target_wasserstein": "empirical matching distance",
+    "diversity_ratio": "diversity ratio",
+}).round(3))
 '''),
         markdown(r'''
 ## Cost model
@@ -972,37 +1087,38 @@ depends on hardware, but the computational distinction is structural:
 | Method | Offline target data | Inference gradients | Main online work |
 |---|---:|---:|---|
 | Baseline | no | no | model forward passes |
-| Gaussian/PCA | yes | no | forwards + small matrix-vector operations |
+| Class-minus-full PCA | yes | no | forwards + small matrix-vector operations |
 | Gradient guidance | yes or external classifier | yes | forwards + backward passes |
 
-**Questions**
+The middle/late result should be read together with the early and overly strong
+comparisons. A direction can be locally correct yet poorly timed, and stronger
+control can trade away distributional fit or diversity.
 
-1. Why can a gradient become unreliable at very high noise?
-2. Does the largest target rate also give the best target Wasserstein distance and diversity?
-3. Which comparison isolates the price of inference-time backpropagation?
+**Change one thing:** In the methods cell, change only the end of the
+middle/late window from `0.92` to `0.60`. Rerun the comparison and ask whether
+stopping before samples are nearly formed changes the trade-off.
 
-Objective-gradient guidance makes a different trade-off from noise alignment:
-its direction adapts to the current state, but each active solver evaluation
-requires backpropagation, and the signal is least trustworthy before the
-denoised estimate carries useful class information. The next question is
-whether a frozen model can supply a useful class direction internally, without
-an inference-time backward pass. Notebook `05` therefore probes a hidden layer,
-learns a target-versus-rest direction offline, and tests whether editing that
-representation changes the generated trajectories.
+Objective-gradient guidance adapts to each state but pays for online
+backpropagation. Notebook `05` asks whether class information already readable
+inside the frozen velocity network can support a forward-only intervention.
 '''),
     ],
     "05_activation_steering_and_method_comparison.ipynb": [
         markdown(r'''
-# 05 - Hidden-feature steering and method comparison
+# 05 - Does a readable hidden feature provide control?
 
 Notebook `04` obtained a steering direction by differentiating an external
-objective at every active step. Here we ask whether a useful direction is
-already present inside the frozen velocity network. We record one hidden layer
-on labeled, noised examples, test on separate examples whether class can be
-decoded from that representation, and learn a target-versus-rest direction
-offline. During sampling we add that direction to the hidden feature rather
-than to the sample position, so the downstream layers decide how the velocity
-changes and no inference-time gradient is needed.
+objective at every active step. Here we first ask whether class is linearly
+decodable from a hidden layer. We then ask a separate causal question: does one
+direction fitted from those features change same-seed generated endpoints more
+than zero and shuffled-direction controls? A strong readout does not guarantee
+strong control.
+
+We fit and test the probe on separate noised examples, learn one target-vs-rest
+direction at `t=0.90`, and then intervene inside the network without an
+inference-time backward pass.
+
+**Time convention:** `t=0` is noise and `t=1` is data.
 '''),
         code(SETUP),
         code(r'''
@@ -1031,12 +1147,16 @@ layer.
 This does **not** pull the sample toward a point. It changes an internal feature,
 which may change the model's velocity; the ODE sampler then accumulates those
 velocity changes. Model weights stay frozen.
+
+**Before you run:** The diagram changes a hidden feature but leaves the current
+sample state untouched. Which part of the network converts that edit into a
+different velocity?
 '''),
         code(r'''
 plot_activation_pipeline()
 '''),
         markdown(r'''
-## 2. When is class information visible in the hidden layer?
+## 2. When is class linearly decodable from the hidden layer?
 
 At each time, we record activations from separate balanced training and test
 sets with independent noise. A linear probe is fitted only on the training
@@ -1044,6 +1164,10 @@ activations and scored on the untouched test activations. A shuffled-label
 probe provides a simple comparison without the true class relationship.
 The comparison asks whether class is readable from the hidden state; it does
 not yet show that editing the state will control generation.
+
+**Before you run:** At `t=0.90`, should held-out accuracy remain above the
+shuffled-label comparison? A strong result would show readable information, but
+would it already demonstrate causal control?
 '''),
         code(r'''
 def collect_activations(model, *, t_value, n_per_class):
@@ -1091,18 +1215,6 @@ display(pd.Series({
     "shuffled-label accuracy": float(shuffled_accuracy),
 }, name=f"t={REFERENCE_T}").round(3))
 '''),
-        code(r'''
-pca_display = fit_pca_projection(train_features)
-projected_test = pca_display.transform(test_features)
-
-fig, ax = plt.subplots(figsize=(6, 5))
-plot_labeled_points(
-    projected_test, test_labels, ax=ax,
-    title=f"Held-out activations at t={REFERENCE_T}", alpha=0.35,
-)
-ax.legend(frameon=False)
-plt.show()
-'''),
         markdown(r'''
 ### Reading fixed-direction transfer
 
@@ -1112,6 +1224,10 @@ directions are only weakly aligned with $d_{0.90}$ near the beginning of that
 window. The intervention therefore does not follow the local class direction
 at every time. It asks a narrower question: can one late-time direction,
 repeated over part of the trajectory, produce a useful endpoint change?
+
+**Before you run:** Predict where the held-out probe will approach chance and
+where a direction learned at `t=0.90` will lose alignment with the local
+target-vs-rest direction.
 '''),
         code(r'''
 probe_rows, directions = activation_probe_sweep(
@@ -1135,16 +1251,14 @@ the remaining classes in hidden space. During an active time window, the model
 adds a scaled unit direction to the selected hidden layer. The scale is relative
 to the current feature RMS, so it remains comparable across time.
 
-This is a genuine hidden-feature intervention, not sample-space attraction. It
-is still simpler than NA-RFM: the paper uses RFM directions in image-model
-activation tensors, while this notebook uses a linear discriminant direction in
-one MLP layer.
+We collect the direction at `t=0.90`, where the held-out probe is strong, then
+reuse it over a wider intervention window. Collection time and intervention
+time are different choices. The cosine plot already warned that one late
+direction is not the local class direction at every step.
 
-We collect the direction at `t = 0.90`, where the held-out probe is strongest,
-then reuse it over a wider intervention window. Collection time and
-intervention time are different choices: the cosine plot above shows that the
-late direction is not the local class direction at every step. The paired
-comparison below asks whether this fixed edit is nevertheless useful.
+**Before you run:** Which control is more informative here: zero strength or a
+same-size direction fitted after shuffling labels? What would it mean if both
+changed the target rate as much as the true direction?
 '''),
         code(r'''
 def activation_velocity(direction, strength, start, end):
@@ -1167,8 +1281,6 @@ target_reference = sample_class(1400, TARGET_CLASS, device=device)
 
 ACTIVATION_STRENGTH = 7.0
 ACTIVATION_WINDOW = (0.40, 0.90)
-COMBINED_ACTIVATION_STRENGTH = 5.0
-COMBINED_ACTIVATION_WINDOW = (0.35, 0.85)
 '''),
         code(r'''
 methods = {
@@ -1180,21 +1292,11 @@ methods = {
     "activation steering": activation_velocity(
         reference_direction, ACTIVATION_STRENGTH, *ACTIVATION_WINDOW,
     ),
-    "noise alignment": make_noise_aligned_velocity(
+    "class-minus-full": make_class_minus_full_velocity(
         model, stats, target_class=TARGET_CLASS, strength=1.6
     ),
     "gradient guidance": make_gradient_guided_velocity(
         model, stats, target_class=TARGET_CLASS, strength=3.0, start=0.15, end=0.92
-    ),
-    "noise + activation": add_noise_alignment(
-        activation_velocity(
-            reference_direction,
-            COMBINED_ACTIVATION_STRENGTH,
-            *COMBINED_ACTIVATION_WINDOW,
-        ),
-        stats,
-        target_class=TARGET_CLASS,
-        strength=1.6,
     ),
 }
 '''),
@@ -1204,7 +1306,17 @@ rows, paths = compare_steering_methods(
 )
 comparison_table = pd.DataFrame(rows)
 comparison_table["runtime / baseline"] = comparison_table["seconds"] / comparison_table.loc[0, "seconds"]
-display(comparison_table.round(4))
+control_names = [
+    "baseline", "activation 0.0", "shuffled activation", "activation steering",
+]
+control_table = comparison_table.set_index("method").loc[control_names].reset_index()
+display(control_table[[
+    "method", "target_rate", "target_wasserstein", "diversity_ratio",
+]].rename(columns={
+    "target_rate": "target-class rate",
+    "target_wasserstein": "empirical matching distance",
+    "diversity_ratio": "diversity ratio",
+}).round(4))
 '''),
         code(r'''
 plot_trajectory_comparison(
@@ -1212,48 +1324,76 @@ plot_trajectory_comparison(
         "baseline": paths["baseline"],
         "shuffled direction": paths["shuffled activation"],
         "activation steering": paths["activation steering"],
-        "noise + activation": paths["noise + activation"],
     },
     target_reference=target_reference[:700],
     n_lines=18,
 )
 plt.show()
-plot_method_tradeoff(comparison_table)
-'''),
-        code(r'''
 method_rows = comparison_table.set_index("method")
 activation_effects = pd.Series({
     "activation target-rate gain": method_rows.loc["activation steering", "target_rate"] - method_rows.loc["baseline", "target_rate"],
     "shuffled-direction gain": method_rows.loc["shuffled activation", "target_rate"] - method_rows.loc["baseline", "target_rate"],
-    "activation Wasserstein reduction": method_rows.loc["baseline", "target_wasserstein"] - method_rows.loc["activation steering", "target_wasserstein"],
+    "activation matching-distance reduction": method_rows.loc["baseline", "target_wasserstein"] - method_rows.loc["activation steering", "target_wasserstein"],
 })
 display(activation_effects.round(4))
 '''),
         markdown(r'''
-## 4. Reading the method comparison
+The zero-strength row checks the complete activation-edit code path without an
+intervention. The shuffled direction checks whether an arbitrary fitted vector
+of the same size produces the same endpoint effect. Only the true-versus-control
+comparison addresses the causal usefulness of this fitted direction. Here the
+true direction raises target occupancy more than the shuffled control, but it
+also stretches many endpoints beyond the target cloud. That is a causal but
+imperfect intervention, not evidence of a clean class axis.
 
-The methods intervene at different places. Noise alignment changes a denoised
-estimate early, objective-gradient guidance differentiates a class score, and
-activation steering edits a hidden feature. Target-class rate describes
-control, Wasserstein distance describes agreement with target examples,
-diversity describes spread, and runtime exposes the price of online
+## 4. Compare three intervention sites
+
+We now keep one tested setting for each mechanism. These are selected operating
+points with different windows, signal sources, and online costs; the comparison
+does not establish one generally best method.
+'''),
+        code(r'''
+method_names = [
+    "baseline", "class-minus-full", "gradient guidance", "activation steering",
+]
+method_table = comparison_table.set_index("method").loc[method_names].reset_index()
+display(method_table[[
+    "method", "target_rate", "target_wasserstein", "diversity_ratio",
+    "runtime / baseline",
+]].rename(columns={
+    "target_rate": "target-class rate",
+    "target_wasserstein": "empirical matching distance",
+    "diversity_ratio": "diversity ratio",
+}).round(4))
+plot_method_tradeoff(method_table)
+'''),
+        markdown(r'''
+## 5. Reading the method comparison
+
+The methods intervene at different places. The class-minus-full correction
+changes a denoised estimate early, objective-gradient guidance differentiates a
+class score, and activation steering edits a hidden feature. Target-class rate
+describes control, empirical matching distance describes agreement with target
+examples, diversity describes spread, and runtime exposes the price of online
 backpropagation. No method is best without naming the trade-off that matters.
-
-**Questions for discussion**
-
-1. Does probe accuracy predict steering success at the same collection time?
-2. Over which times is the learned direction stable enough to reuse?
-3. When does combining coarse high-noise and later activation control help?
-4. Which conclusion from 2D would require a new experiment before claiming it for images?
 
 The probe and intervention answer different questions: held-out decoding shows
 that class information is readable from the hidden layer, while paired
 sampling tests whether one fixed late-time direction is useful over the chosen
 intervention window. Neither result implies a unique class axis or a
-time-invariant representation. Across the toy series, we have now compared
-three distinct intervention sites. Notebook `06` carries only noise alignment
-to a pretrained image model and asks whether paired images and batch-level
-features still reveal a measurable, partial shift.
+time-invariant representation. Activation steering can be weaker than the
+probe accuracy suggests because the direction is fixed while the representation
+rotates across time, and because decodability does not guarantee that the
+downstream velocity is sensitive in the same direction.
+
+**Change one thing:** Replace `REFERENCE_T = 0.90` with `0.70`, rerun the probe
+and intervention sections, and compare both direction alignment and endpoint
+control. Do not compare target rate alone.
+
+Across the toy series, we have now compared three intervention sites. Notebook
+`06` carries only the class-minus-full denoiser correction to a pretrained
+image model and asks whether same-seed image pairs reveal a measurable but
+partial shift.
 '''),
     ],
 }

@@ -124,8 +124,9 @@ Euler, Heun, and RK4 are numerical approximations to the same ODE. Once the
 initial tensor, model, solver, step count, and floating-point environment are
 fixed, the rollout contains no further random draw.
 
-This is why paired initial noise is a strong experimental control: two methods
-start from the same individual samples, not merely from the same distribution.
+This is why a same-seed paired comparison is a strong experimental control: two
+methods reuse the exact initial noise tensor rather than merely sampling from
+the same distribution.
 
 ## 5. Additive-noise coordinates
 
@@ -181,14 +182,17 @@ LSUN-Churches. That paper does not provide the ImageNet experiment for these
 notes. Our larger image evidence is instead the manifest-locked CIFAR-10
 experiment using NVIDIA's official unconditional EDM checkpoint.
 
-The notebook noise-alignment signal is
+The notebook first describes the steering signal literally as a
+**class-minus-full correction**:
 
 ```text
 Delta D = D_target_class - D_full_data.
 ```
 
 It is computed from labeled examples offline and applied only at high noise.
-This is distinct from reusing the same initial noise tensor for evaluation.
+Wang, Belkin, and Wang call this distributional correction **noise
+alignment**. It is distinct from reusing the same initial noise tensor for a
+paired evaluation.
 
 ## 7. Gradient guidance
 
@@ -241,8 +245,8 @@ Three questions keep readability and control separate:
 
 The circle asks whether the model can form thin, continuous curved support
 rather than merely choosing among a few centers. Radial error checks ring
-thickness and location; angular occupancy checks for gaps; Wasserstein distance
-compares the generated and target point clouds.
+thickness and location; angular occupancy checks for gaps; an empirical
+Wasserstein matching distance compares fixed generated and target point clouds.
 
 The eight-Gaussian example stores a deterministic trajectory for every sampled
 base point. Only after sampling, each endpoint is assigned to its nearest data
@@ -255,11 +259,11 @@ mass. Occupancy error compares generated and target component frequencies. The
 mean nearest-component distance checks within-component spread. No one metric
 establishes distributional equality.
 
-For Wasserstein distance, the implementation chooses equal-size deterministic
-subsets and solves a minimum-cost one-to-one matching using Euclidean distance.
-It reports the mean length of the matched pairs. This is a finite-sample
-empirical estimate: lower is better, but separate coverage and spread checks
-can still reveal failures hidden by one scalar summary.
+For this empirical matching distance, the implementation chooses equal-size
+deterministic subsets and solves a minimum-cost one-to-one matching using
+Euclidean distance. It reports the mean length of the matched pairs. Lower is
+better for those subsets, but separate coverage and spread checks can still
+reveal failures hidden by one scalar summary.
 
 ## 10. From the toy mechanisms to the image experiment
 
@@ -281,12 +285,12 @@ controls, stronger quality metrics, and broader validation.
 
 | Idea | Toy realization | What changes at image scale |
 |---|---|---|
-| High-noise noise alignment | target-class Gaussian denoiser minus full-data Gaussian denoiser | Notebook `06` uses low-rank PCA statistics over CIFAR-10 images |
+| Class-minus-full correction (noise alignment) | target-class Gaussian denoiser minus full-data Gaussian denoiser | Notebook `06` uses low-rank PCA statistics over CIFAR-10 images |
 | Objective-gradient guidance | differentiate a class score through the 2D denoised estimate | a larger model would require an image-level objective and online backpropagation |
 | Activation collection | record one MLP hidden layer on labeled, noised points | an image experiment must choose a particular network block and tensor representation |
 | Activation direction | covariance-aware target-versus-rest direction | full NA-RFM uses a richer feature-learning construction |
 | Online activation edit | add one fixed direction over a time window | image tensors require a defined broadcast, normalization, and matched control |
 
 The table is a map between ideas, not an equivalence claim. Notebook `06`
-extends only noise alignment to images; the hidden-feature experiment remains a
-separate next step.
+extends only the class-minus-full correction to images; the hidden-feature
+experiment remains a separate next step.

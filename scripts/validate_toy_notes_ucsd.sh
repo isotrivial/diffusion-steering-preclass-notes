@@ -39,7 +39,9 @@ summary = {
 print(json.dumps(summary, indent=2))
 PY
 
-python -m pytest -q notebooks/toy_data/tests/test_toy_notes.py \
+python -m pytest -q \
+  notebooks/toy_data/tests/test_toy_notes.py \
+  notebooks/toy_data/tests/test_notebook_pedagogy.py \
   2>&1 | tee "${VALIDATION_DIR}/unit-tests.log"
 
 python scripts/run_toy_notes.py \
@@ -66,7 +68,7 @@ minimum_images = {
     "01_train_unconditional_flow_matching.ipynb": 9,
     "02_denoisers_and_deterministic_samplers.ipynb": 4,
     "03_gaussian_denoisers_and_noise_alignment.ipynb": 5,
-    "05_activation_steering_and_method_comparison.ipynb": 5,
+    "05_activation_steering_and_method_comparison.ipynb": 4,
 }
 for record in records:
     executed = json.loads(Path(record["executed"]).read_text())

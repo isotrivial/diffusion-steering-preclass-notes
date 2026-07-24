@@ -826,9 +826,6 @@ def plot_metric_comparison(result: dict[str, Any]):
     methods = ["baseline", "zero", "target", "wrong"]
     labels = ["baseline", "zero", "target", "wrong"]
     target_rates = [result["metrics"][method]["target_rate"] for method in methods]
-    target_probabilities = [
-        result["metrics"][method]["target_probability"] for method in methods
-    ]
     feature_distances = [
         result["metrics"][method]["target_feature_mean_distance"] for method in methods
     ]
@@ -838,13 +835,12 @@ def plot_metric_comparison(result: dict[str, Any]):
         for method in methods
     ]
     panels = [
-        (target_rates, "target prediction rate", None),
-        (target_probabilities, "mean target probability", None),
-        (feature_distances, "distance to target features", None),
-        (trace_ratios, "feature diversity ratio", 1.0),
+        (target_rates, "Target prediction rate\n(higher is better)", None),
+        (feature_distances, "Distance to target features\n(lower is better)", None),
+        (trace_ratios, "Retained feature variation\n(1.0 matches baseline)", 1.0),
     ]
     colors = ["#666666", "#999999", "#0072B2", "#D55E00"]
-    fig, axes = plt.subplots(1, 4, figsize=(14, 3.7))
+    fig, axes = plt.subplots(1, 3, figsize=(11, 3.7))
     for axis, (values, title, reference) in zip(axes, panels):
         axis.bar(labels, values, color=colors)
         if reference is not None:
