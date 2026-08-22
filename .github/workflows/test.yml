@@ -1,139 +1,45 @@
-name: Tests
+name: Notebook checks
 
-#on:
-#  push:
-#    branches: [main]
-#  pull_request:
-#    branches: [main, "release/*", "dev"]
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notebook-checks-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  run_tests_ubuntu:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["ubuntu-latest"]
-        python-version: ["3.8", "3.9", "3.10"]
-
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
-          pip install sh
-
-      - name: List dependencies
-        run: |
-          python -m pip list
-
-      - name: Run pytest
-        run: |
-          pytest -v
-
-  run_tests_macos:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["macos-latest"]
-        python-version: ["3.8", "3.9", "3.10"]
-
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
-          pip install sh
-
-      - name: List dependencies
-        run: |
-          python -m pip list
-
-      - name: Run pytest
-        run: |
-          pytest -v
-
-  run_tests_windows:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["windows-latest"]
-        python-version: ["3.8", "3.9", "3.10"]
-
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
-
-      - name: List dependencies
-        run: |
-          python -m pip list
-
-      - name: Run pytest
-        run: |
-          pytest -v
-
-  # upload code coverage report
-  code-coverage:
+  notebook-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MPLBACKEND: Agg
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: notebooks/toy_data/requirements-notes.txt
 
-      - name: Install dependencies
+      - name: Install notebook test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
-          pip install pytest-cov[toml]
-          pip install sh
+          python -m pip install -r notebooks/toy_data/requirements-notes.txt
 
-      - name: Run tests and collect coverage
-        run: pytest --cov src # NEEDS TO BE UPDATED WHEN CHANGING THE NAME OF "src" FOLDER
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Run notebook unit and publication checks
+        run: |
+          python -m pytest -q \
+            notebooks/toy_data/tests/test_toy_notes.py \
+            notebooks/toy_data/tests/test_notebook_pedagogy.py \
+            notebooks/toy_data/tests/test_edm_cifar10_bridge.py
