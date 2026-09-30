@@ -30,6 +30,11 @@ same filenames one directory above are output-free implementation sources.
 The older exploratory notebooks are retained under `legacy/` as research
 provenance. They are not part of the pre-class reading sequence.
 
+After notebooks 00–02, the optional [MNIST speedrun](../../speedrun/README.md)
+lets you compare sampler cost and quality using a supplied class-conditional
+image model and frozen evaluator. Its [executed example](../../speedrun/MNIST_SPEEDRUN.executed.ipynb)
+includes a 10,000-image scorecard; it requires no training.
+
 Notebook `06` uses NVIDIA's unconditional CIFAR-10 EDM checkpoint and a
 class-minus-full PCA denoiser correction. The learner-facing notebook focuses
 on the images, trajectory, metrics, and limits. Reproduction details, pinned

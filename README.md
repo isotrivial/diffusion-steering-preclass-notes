@@ -36,6 +36,19 @@ There is no attraction-to-a-point controller in the maintained sequence. A
 class is represented by examples, fitted distributions, class objectives, or
 held-out activation directions, never by a chosen target point.
 
+## Optional MNIST speedrun
+
+After notes 00–02, try the [MNIST speedrun](speedrun/README.md): vary guidance,
+step count, and sampler while keeping the model and evaluator fixed. This
+exercise uses a separate class-conditional MNIST generator. The trained weights,
+frozen FID-M reference, and requested-digit agreement metric are included, so
+students can sample and score without training or downloading a dataset.
+
+Open the [student notebook](speedrun/MNIST_SPEEDRUN.ipynb) or the
+[executed 10,000-image example](speedrun/MNIST_SPEEDRUN.executed.ipynb).
+The [exercise specification](speedrun/SPEC.md) gives the practice quality band
+and distinguishes it from a graded leaderboard requiring hidden-seed calibration.
+
 ## CIFAR-10 image experiment
 
 The toy notes make each mechanism visible. The image experiment then asks
@@ -79,6 +92,7 @@ bash scripts/validate_cifar10_edm_bridge_ucsd.sh
 - `notebooks/toy_data/`: maintained notes, reading material, tests, and shared helpers;
 - `notebooks/toy_data/executed/`: published snapshots with inline figures and tables;
 - `notebooks/toy_data/optional/`: manifest and source code for the image experiment;
+- `speedrun/`: optional MNIST sampling exercise, frozen scoring artifacts, and an executed example;
 - `notebooks/toy_data/legacy/`: preserved exploratory notebooks that are not part of the reading sequence;
 - `scripts/build_toy_notes.py`: readable source for the six generated notebooks;
 - `scripts/run_toy_notes.py`: ordered notebook runner;

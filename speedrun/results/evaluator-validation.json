@@ -1,0 +1,25 @@
+{
+  "protocol": "mnist-fidm-v1",
+  "device": "cpu",
+  "real_test_10000": {
+    "fid_m": 5.584403628929067,
+    "accuracy": 0.9932,
+    "target_confidence": 0.9911576105117798,
+    "nonduplicate_fraction": 0.9823
+  },
+  "blurred_1000_fid_m": [
+    717.1465983696417,
+    1530.7212360850417,
+    2702.886281191947
+  ],
+  "noise_1000_fid_m": 2591.6869986420506,
+  "repeated_image_nonduplicate_fraction": 0.0,
+  "checks": {
+    "real_accuracy_above_99": true,
+    "real_fid_below_10": true,
+    "blur_increases": true,
+    "noise_worse_than_real": true,
+    "duplicates_rejected": true
+  },
+  "seconds": 6.519707917
+}

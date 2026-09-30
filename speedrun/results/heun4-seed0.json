@@ -1,0 +1,32 @@
+{
+  "protocol": "mnist-fidm-v1",
+  "config": {
+    "steps": 4,
+    "w": 2.0,
+    "eta": 0.0,
+    "order": "heun"
+  },
+  "n": 10000,
+  "seed": 0,
+  "batch_size": 128,
+  "nfe_per_sample": 14,
+  "fid_m": 79.28560004765677,
+  "accuracy": 0.9978,
+  "target_confidence": 0.9976077953338623,
+  "nonduplicate_fraction": 0.9736,
+  "sampling_seconds_median": 79.156982625,
+  "sampling_seconds": [
+    79.156982625
+  ],
+  "timing_repeats": 1,
+  "full_protocol": true,
+  "meets_practice_band": true,
+  "device": "mps",
+  "torch_version": "2.8.0",
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "sha256": {
+    "checkpoints/evaluator.pt": "05e955d1c14856991785c408f9a818b5d887cdc2c5142d63eac134367f50b7fe",
+    "checkpoints/generator.pt": "46f98e1c69f39638ae70c5335c04c14d930fc363ddfb9f7d87721b09ef4609d4",
+    "checkpoints/reference.npz": "b18e718c08890a37155d639de7dc5d2de26b2c943f34f623c1195f12116bb169"
+  }
+}

@@ -170,3 +170,9 @@ configs/local/default.yaml
 /data/
 /logs/
 .env
+
+# Download caches and local runs; released MNIST speedrun weights are versioned.
+speedrun/data/
+speedrun/results/local/
+speedrun/results/claude-20260930/
+speedrun/checkpoints/training/

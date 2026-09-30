@@ -43,3 +43,8 @@ jobs:
             notebooks/toy_data/tests/test_toy_notes.py \
             notebooks/toy_data/tests/test_notebook_pedagogy.py \
             notebooks/toy_data/tests/test_edm_cifar10_bridge.py
+
+      - name: Check the frozen MNIST speedrun
+        run: |
+          python speedrun/test_speedrun.py
+          python speedrun/benchmark.py --device cpu --n 100 --steps 2 --repeats 1 --out speedrun/results/local/ci-smoke.json
