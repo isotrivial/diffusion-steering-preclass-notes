@@ -22,11 +22,9 @@ evaluations (NFE), then explain the tradeoff using metrics and images.
 - 10,000 generated samples, with 1,000 requests for each digit;
 - initial-noise seed and sampling batch size (128).
 
-The notebook verifies the three artifact hashes in
-[release.json](release.json). Retraining, fine-tuning, changing
-weights or the evaluator, choosing favorable seeds, and discarding generated
-images are outside the challenge. The 100-image preview is for inspecting
-images, not for leaderboard FID-M.
+Keep these settings fixed for every configuration and score all generated
+images. Use the 100-image preview to inspect samples, then generate 10,000
+images for the scorecard.
 
 ## What students may change
 
@@ -48,19 +46,17 @@ Each configuration reports:
 - nonduplicate fraction in that feature space;
 - NFE per generated image;
 - median sampling time over three runs after warm-up;
-- sample count, seed, batch size, device, library version, artifact hashes;
+- sample count, seed, batch size, device, and library version;
 - a fixed-seed image grid.
 
-FID-M is not comparable to published Inception FID. Nonduplicate fraction
-checks for close generated neighbors; it is not a measurement of real-mode
-coverage. Both quality and diversity diagnostics matter.
+FID-M measures distributional distance in the frozen MNIST feature space.
+Nonduplicate fraction checks for close generated neighbors.
 
 Requested-digit agreement means the fraction the frozen classifier labels as
 the digit requested from the generator (the JSON field is named `accuracy`).
-Asking for a 7 and getting an image classified as 7 counts as agreement. This
-checks conditioning, not overall image quality: one repeated prototype per
-digit could score 100%. The evaluator's own test accuracy is a separate
-measurement on real MNIST images with known labels.
+Asking for a 7 and getting an image classified as 7 counts as agreement.
+The evaluator's own test accuracy is measured on real MNIST images with known
+labels.
 
 NFE is the primary cost measure. With `w=2`, DDIM/Euler cost `2*steps` and
 Heun costs `2*(2*steps-1)`. At `w=0` or `w=1`, these counts are halved.
@@ -83,8 +79,6 @@ A practice configuration qualifies if all three conditions hold at the fixed
 
 Among qualifying configurations, lower NFE ranks first, followed by lower median
 wall time on the designated hardware, then higher nonduplicate fraction.
-These bands support the released practice example. They are not a validated
-hidden-seed grading rule.
 
 ## Student submission
 
@@ -95,9 +89,5 @@ hidden-seed grading rule.
 
 ## Before a graded leaderboard
 
-The runnable practice package includes frozen artifacts, an executed example,
-metric sanity checks, NFE regression checks, and deterministic replay checks.
-Before assigning grades, instructors must additionally fix hidden evaluation
-seeds, calibrate their quality bands, and measure a complete run on the target
-student hardware. The full 10,000-image notebook has been exercised on Apple
-MPS; a CPU or Colab class-time budget is not certified.
+For graded runs, choose the evaluation seeds and quality bands, then measure
+the runtime on the student hardware.

@@ -47,7 +47,7 @@ students can sample and score without training or downloading a dataset.
 Open the [student notebook](speedrun/MNIST_SPEEDRUN.ipynb) or the
 [executed 10,000-image example](speedrun/MNIST_SPEEDRUN.executed.ipynb).
 The [exercise specification](speedrun/SPEC.md) gives the practice quality band
-and distinguishes it from a graded leaderboard requiring hidden-seed calibration.
+and submission instructions.
 
 ## CIFAR-10 image experiment
 
