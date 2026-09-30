@@ -26,14 +26,14 @@ Keep these settings fixed for every configuration and score all generated
 images. Use the 100-image preview to inspect samples, then generate 10,000
 images for the scorecard.
 
-## What students may change
+## What you may change
 
 1. guidance scale `w`, using `u + w*(c-u)`: 0 is unconditional, 1 conditional;
 2. sampling-step count;
 3. sampler: DDIM, Euler, or Heun;
 4. stochastic DDIM `eta` in [0,1]; Euler and Heun require `eta=0`.
 
-Students submit at most five configurations. Record every value. Euler and
+Try at most five configurations. Record every value. Euler and
 Heun integrate velocity; DDIM uses the clean/noise transport. All finish with
 a denoising step instead of evaluating a singular velocity at the data endpoint.
 
@@ -46,14 +46,14 @@ Each configuration reports:
 - nonduplicate fraction in that feature space;
 - NFE per generated image;
 - median sampling time over three runs after warm-up;
-- sample count, seed, batch size, device, and library version;
+- sample count, seed, and batch size;
 - a fixed-seed image grid.
 
 FID-M measures distributional distance in the frozen MNIST feature space.
 Nonduplicate fraction checks for close generated neighbors.
 
 Requested-digit agreement means the fraction the frozen classifier labels as
-the digit requested from the generator (the JSON field is named `accuracy`).
+the digit requested from the generator.
 Asking for a 7 and getting an image classified as 7 counts as agreement.
 The evaluator's own test accuracy is measured on real MNIST images with known
 labels.
@@ -61,12 +61,12 @@ labels.
 NFE is the primary cost measure. With `w=2`, DDIM/Euler cost `2*steps` and
 Heun costs `2*(2*steps-1)`. At `w=0` or `w=1`, these counts are halved.
 For example, 7-step DDIM and 4-step Heun both use 14 NFE at `w=2`.
-Wall time is comparable only on the same device class and batch size. The
-notebook defaults to one measured run for practice; set `REPEATS=3` for timing.
+Run timing comparisons on the same device and batch size. Set `REPEATS=3` to
+report median sampling time.
 
 ## Practice rule
 
-The reference is 16-step DDIM with `w=2`, `eta=0`, seed 0. Its measured
+The reference is 16-step DDIM with `w=2`, `eta=0`, seed 0. Its
 [scorecard](results/reference-seed0.json) uses 32 NFE and scores
 FID-M 91.13, digit agreement 99.81%, and nonduplicate fraction 96.89%.
 
@@ -80,14 +80,9 @@ A practice configuration qualifies if all three conditions hold at the fixed
 Among qualifying configurations, lower NFE ranks first, followed by lower median
 wall time on the designated hardware, then higher nonduplicate fraction.
 
-## Student submission
+## What to submit
 
 - executed notebook and up to five complete scorecards;
 - one fixed-seed grid for the selected configuration;
 - a 200-word explanation of why the knobs changed quality and cost;
 - one failure case or negative result.
-
-## Before a graded leaderboard
-
-For graded runs, choose the evaluation seeds and quality bands, then measure
-the runtime on the student hardware.
